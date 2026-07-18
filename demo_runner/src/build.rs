@@ -159,10 +159,6 @@ pub fn is_dirty(target: &Path, source: &Path, opts: &Opts) -> io::Result<bool> {
 }
 
 pub fn apply_compiler_args(case: &TestCase, opts: &Opts, compiler_command: &mut Command) {
-    if opts.verbose {
-        compiler_command.arg("-v");
-    }
-
     if opts.debug {
         compiler_command.arg("-g");
     }

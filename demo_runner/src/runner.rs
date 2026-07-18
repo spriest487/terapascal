@@ -257,7 +257,7 @@ fn run_step(
         
         return Ok(expected_err);
     }
-    
+
     if let Some(input) = &step.input {
         println!("  >> {}", input.trim_end());
         stdin.write_all(input.as_bytes())?;
@@ -356,7 +356,8 @@ fn try_run_interactive<RunFn>(command: &mut Command, opts: &Opts, f: RunFn) -> i
 // run the test on the output of a failed build
 // (a failure might be OK, we need to verify some build errors log correctly)
 fn run_after_build_err<RunFn>(stdout: &mut Vec<u8>, stderr: &mut Vec<u8>, run: RunFn)
-where RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
+where 
+    RunFn: FnOnce(&mut dyn Write, &mut dyn Read, &mut dyn Read)
 {
     let mut no_write = Vec::new();
     run(&mut no_write, &mut stdout.as_slice(), &mut stderr.as_slice());
