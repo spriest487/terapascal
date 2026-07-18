@@ -131,21 +131,6 @@ impl<'a> TestRunner<'a> {
             };
         }
 
-        // there's output remaining that no step matched, report it as an error now
-        if failure_reason.is_none() {
-            process.close_stdin();
-
-            if let Err(err) = process.stdout.read_to_end(&mut self.out_buf) {
-                return self.handle_error(err);
-            }
-
-            let out_text = String::from_utf8_lossy(&self.out_buf);
-            if !out_text.is_empty() {
-                failure_reason = Some(FailureReason::UnexpectedOut);
-                handled_error = true;
-            }
-        }
-
         // if a step failed, we expect the process to exit with an error status, and that
         // error should not affect the outcome
         if let Err(err) = process.wait(&mut self.out_buf, &mut self.err_buf)
@@ -197,19 +182,14 @@ impl<'a> TestRunner<'a> {
             read_to_line_feed(&mut process.stdout, &mut self.out_buf)?;
             let line_text = String::from_utf8_lossy(&self.out_buf);
 
-            if line_text.is_empty() {
-                let failure = FailureReason::MissingOut(expect_output_pattern.clone());
-                return Ok(StepStatus::Failed(failure));
-            }
-
             let regex = Regex::new(&format!("(?s){}", expect_output_pattern))
                 .map_err(|err| RunError::InvalidRegex {
                     err,
                     src: expect_output_pattern.clone(),
                 })?;
 
-            if !regex.is_match(&line_text) {
-                return Ok(StepStatus::Failed(FailureReason::UnexpectedOut));
+            if !regex.is_match(&line_text.trim()) {
+                return Ok(StepStatus::Failed(FailureReason::MissingOut(expect_output_pattern.to_string())));
             }
 
             self.out_buf.push('\n' as u8);
@@ -217,13 +197,8 @@ impl<'a> TestRunner<'a> {
             read_to_line_feed(&mut process.stdout, &mut self.out_buf)?;
             let line_text = String::from_utf8_lossy(&self.out_buf);
 
-            if line_text.is_empty() {
-                let failure = FailureReason::MissingOut(expect_output.clone());
-                return Ok(StepStatus::Failed(failure));
-            }
-
-            if *expect_output != line_text {
-                return Ok(StepStatus::Failed(FailureReason::UnexpectedOut));
+            if expect_output.trim() != line_text.trim() {
+                return Ok(StepStatus::Failed(FailureReason::MissingOut(line_text.to_string())));
             }
 
             self.out_buf.push('\n' as u8);

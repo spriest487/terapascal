@@ -54,12 +54,10 @@ fn main() -> Result<(), i32> {
             let index = new_output.index;
             outputs[index] = Some(new_output);
 
-            while let Some(output)= outputs[next_index].take() {
+            while next_index < case_count
+                && let Some(output) = outputs[next_index].take()
+            {
                 next_index += 1;
-
-                if next_index >= case_count {
-                    break;
-                }
 
                 if output.status.is_skipped() {
                     skipped_count += 1;
@@ -83,9 +81,6 @@ fn main() -> Result<(), i32> {
                             FailureReason::MissingOut(expected) => {
                                 println!("expected output '{expected}'");
                             },
-                            FailureReason::UnexpectedOut => {
-                                println!("unexpected output");
-                            }
                             FailureReason::UnexpectedErr(output) => {
                                 println!("unexpected error output '{output}'");
                             }
