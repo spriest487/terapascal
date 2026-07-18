@@ -1,11 +1,14 @@
 mod test_process;
+mod output;
+mod case;
+
+pub use self::output::*;
+pub use self::case::*;
 
 use self::test_process::*;
 use crate::build::*;
 use crate::error::*;
 use crate::opts::*;
-use crate::test_case::*;
-use crate::test_output::*;
 use crate::util::*;
 use regex::Regex;
 use std::env::consts::EXE_EXTENSION;

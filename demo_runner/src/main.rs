@@ -1,17 +1,13 @@
 mod opts;
 mod test_script;
-mod test_case;
 mod build;
 mod test_runner;
 mod error;
-mod test_output;
 mod util;
 
-use crate::test_output::*;
 use crate::build::*;
 use crate::opts::Opts;
-use crate::test_case::TestCase;
-use crate::test_runner::TestRunner;
+use crate::test_runner::*;
 use rayon::iter::*;
 use std::sync;
 use std::sync::Arc;

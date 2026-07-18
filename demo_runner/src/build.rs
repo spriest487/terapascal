@@ -1,7 +1,7 @@
 use crate::error::RunError;
 use crate::error::RunResult;
 use crate::opts::Opts;
-use crate::test_case::TestCase;
+use crate::test_runner::TestCase;
 use chrono::DateTime;
 use chrono::Utc;
 use std::env;
