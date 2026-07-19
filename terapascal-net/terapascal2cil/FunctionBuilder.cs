@@ -64,17 +64,16 @@ public class FunctionBuilder {
             }
 
             foreach (var (ifaceRef, ifaceImpl) in impls) {
-                if (!lib.Metadata.Interfaces.TryGetValue(ifaceRef.DefID, out var ifaceDecl)
-                    || ifaceDecl is not IR.DefInterfaceDecl(var ifaceDef)
-                ) {
-                    throw new InvalidDataException($"missing interface def for implemented interface {ifaceRef.DefID}");
-                }
+                var ifaceTypeInstance = this.assemblyBuilder.TypeBuilder.GetInterfaceType(ifaceRef);
 
-                var ifaceType = ifaceRef.ToObjectID().ToObjectType();
-                var ifaceTypeDef = this.assemblyBuilder.TypeBuilder.BuildType(ifaceType).Resolve();
-                
                 foreach (var (methodID, implID) in ifaceImpl.Methods) {
-                    this.BuildInterfaceMethodImpl(ifaceDef, ifaceTypeDef, methodID, implID, selfType);
+                    this.BuildInterfaceMethodImpl(
+                        ifaceTypeInstance.InterfaceDef,
+                        ifaceTypeInstance.TypeDef,
+                        methodID,
+                        implID,
+                        selfType
+                    );
                 }
             }
         }

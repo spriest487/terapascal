@@ -307,7 +307,14 @@ public class AssemblyBuilder : IDisposable {
 
         foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
             if (ifaceDecl is IR.DefInterfaceDecl(_)) {
-                var ifaceType = id.ToInterfacePointerType(ifaceDecl.GetDeclName().GetGenericArgs());
+                var declName = ifaceDecl.GetDeclName();
+
+                // TODO: native generics
+                if (declName.HasTypeParams) {
+                    continue;
+                }
+
+                var ifaceType = id.ToInterfacePointerType(declName.GetGenericArgs());
                 this.TypeBuilder.BuildType(ifaceType);
             }
         }

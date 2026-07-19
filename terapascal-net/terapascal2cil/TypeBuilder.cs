@@ -28,6 +28,11 @@ internal class BoxTypeInfo {
     internal required FieldReference ValueFieldRef { get; init; }
 }
 
+internal class InterfaceTypeInstance {
+    internal required IR.InterfaceDef InterfaceDef { get; init; }
+    internal required TypeDefinition TypeDef { get; init; }
+}
+
 public class TypeBuilder {
     public const string VariantTagName = "Discriminator";
 
@@ -44,6 +49,7 @@ public class TypeBuilder {
     private readonly SortedDictionary<TypeID, StructLayout> structLayouts;
     private readonly SortedDictionary<TypeID, VariantLayout> variantLayouts;
 
+    private readonly SortedDictionary<TypeID, InterfaceTypeInstance> interfaceTypeCache;
     private readonly Dictionary<(TypeID, IR.MethodID), MethodReference> interfaceMethods;
 
     private readonly FieldReference closurePointerField;
@@ -87,6 +93,7 @@ public class TypeBuilder {
         this.structLayouts = [];
         this.variantLayouts = [];
 
+        this.interfaceTypeCache = [];
         this.interfaceMethods = [];
 
         this.rcMethodTables = [];
@@ -1050,19 +1057,33 @@ public class TypeBuilder {
         return pointerType;
     }
 
-    private TypeDefinition BuildInterfaceDef(IR.InterfaceRef ifaceRef) {
+    internal InterfaceTypeInstance GetInterfaceType(IR.InterfaceRef ifaceRef) {
+        var ifaceType = ifaceRef.ToObjectID().ToObjectType();
+
+        this.BuildType(ifaceType, out var typeID);
+
+        return this.interfaceTypeCache[typeID];
+    }
+
+    private TypeReference BuildInterfaceDef(IR.InterfaceRef ifaceRef) {
         if (!this.assemblyBuilder.LoadedMetadata.FindInterfaceDecl(ifaceRef.DefID, out var ifaceDecl)
-            || ifaceDecl is not IR.DefInterfaceDecl(var ifaceDef)
+            || ifaceDecl is not IR.DefInterfaceDecl(var genericDef)
         ) {
             throw new InvalidDataException($"missing interface definition: {ifaceRef.DefID}");
         }
 
-        var declName = ifaceDecl.GetDeclName();
-        var typeMap = IR.Util.BuildGenericTypeMap(declName.TypeParams ?? [], ifaceRef.Args ?? []);
+        IR.InterfaceDef ifaceDef;
+        IR.NamePath defName;
+        if (genericDef.Name.HasTypeParams) {
+            var typeMap = IR.Util.BuildGenericTypeMap(genericDef.Name.TypeParams, ifaceRef.Args ?? []);
+            ifaceDef = genericDef.ResolveGeneric(typeMap);
+            defName = genericDef.Name.ResolveGeneric(typeMap);
+        } else {
+            ifaceDef = genericDef;
+            defName = genericDef.Name.ToGenericName();
+        }
 
-        var interfaceName = declName.ResolveGeneric(typeMap);
-
-        var name = this.CreateUniqueTypeName(interfaceName, out var ns);
+        var name = this.CreateUniqueTypeName(defName, out var ns);
 
         const TypeAttributes attrs = TypeAttributes.NotPublic
             | TypeAttributes.Interface
@@ -1114,6 +1135,12 @@ public class TypeBuilder {
         }
 
         module.Types.Add(typeDef);
+
+        var ifaceTypeInstance = new InterfaceTypeInstance {
+            InterfaceDef = ifaceDef,
+            TypeDef = typeDef,
+        };
+        this.interfaceTypeCache[typeID] = ifaceTypeInstance;
 
         return typeDef;
     }
