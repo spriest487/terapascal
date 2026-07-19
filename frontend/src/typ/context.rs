@@ -1,9 +1,13 @@
+pub mod completion;
+
+#[cfg(test)]
+mod test;
+
 mod builtin;
 mod scope;
 mod value_kind;
 mod binding;
 mod member;
-pub mod completion;
 
 mod decl;
 mod def;
@@ -312,28 +316,30 @@ impl Context {
     }
 
     pub fn find_decl(&self, name: &Ident) -> Option<&Ident> {
-        match self.find_name(name)? {
+        match self.find_name(name, false)? {
             ScopeMemberRef::Decl { key, .. } => Some(key),
             _ => None,
         }
     }
 
-    pub fn find_name(&self, name: &Ident) -> Option<ScopeMemberRef<'_>> {
-        self.find_path(&IdentPath::from_parts([name.clone()]))
+    pub fn find_name(&self, name: &Ident, include_invisible: bool) -> Option<ScopeMemberRef<'_>> {
+        self.find_path(&IdentPath::from_parts([name.clone()]), include_invisible)
     }
 
-    pub fn find_path(&self, path: &IdentPath) -> Option<ScopeMemberRef<'_>> {
+    pub fn find_path(&self, path: &IdentPath, include_invisible: bool) -> Option<ScopeMemberRef<'_>> {
         // start by assuming any path we are searching for might be relative
-        self.find_path_rec(path, true)
+        self.find_path_rec(path, true, include_invisible)
     }
 
-    fn find_path_rec(&self, path: &IdentPath, path_is_relative: bool) -> Option<ScopeMemberRef<'_>> {
-        match self.scopes.resolve_path(path) {
+    fn find_path_rec(&self, path: &IdentPath, path_is_relative: bool, include_invisible: bool) -> Option<ScopeMemberRef<'_>> {
+        let result_ref = match self.scopes.resolve_path(path) {
             // found an alias - resolve using its real name
             Some(ScopeMemberRef::Decl {
                 value: Decl::Alias(aliased),
                 ..
-            }) => self.find_path(aliased),
+            }) => {
+                self.find_path(aliased, include_invisible)
+            },
 
             // matches a decl
             decl_ref @ Some(ScopeMemberRef::Decl { .. }) => {
@@ -345,7 +351,7 @@ impl Context {
                 if path_is_relative {
                     // always resolve to a decl if one matches in any using, rather than a scope
                     // even if the scope with this name is in this unit
-                    match self.find_path_in_used_units(path) {
+                    match self.find_path_in_used_units(path, include_invisible) {
                         used_decl_ref @ Some(ScopeMemberRef::Decl { .. }) => used_decl_ref,
                         None => scope_ref,
                         used_scope_ref @ Some(ScopeMemberRef::Scope { .. }) => used_scope_ref,
@@ -358,15 +364,21 @@ impl Context {
             // nothing matched in this scope, maybe in one of the used units
             None => {
                 if path_is_relative {
-                    self.find_path_in_used_units(path)
+                    self.find_path_in_used_units(path, include_invisible)
                 } else {
                     None
                 }
             },
+        }?;
+
+        if !include_invisible && !result_ref.is_visible_from(&self.current_scope()) {
+            return None;
         }
+
+        Some(result_ref)
     }
 
-    fn find_path_in_used_units(&self, path: &IdentPath) -> Option<ScopeMemberRef<'_>> {
+    fn find_path_in_used_units(&self, path: &IdentPath, include_invisible: bool) -> Option<ScopeMemberRef<'_>> {
         let current_path = self.scopes.current_path();
 
         // try it as a qualified name in a used namespaces
@@ -380,7 +392,7 @@ impl Context {
                 path_in_unit.extend(path.iter().cloned());
 
                 // this should only be treated as an absolute path
-                self.find_path_rec(&path_in_unit, false)
+                self.find_path_rec(&path_in_unit, false, include_invisible)
             })
             .collect();
 
@@ -462,7 +474,7 @@ impl Context {
     fn declare(&mut self, name: Ident, decl: Decl) -> TypeResult<()> {
         let local_name_path = IdentPath::from(name.clone());
 
-        match self.find_path(&local_name_path) {
+        match self.find_path(&local_name_path, false) {
             Some(ScopeMemberRef::Decl {
                 value: Decl::Alias(aliased),
                 key,
@@ -772,7 +784,7 @@ impl Context {
     /// Returns true if the given name is either not declared in this scope, or is a forward
     /// declaration in this scope which can be replaced by a type definition using the same name.
     pub fn can_define_type(&self, name: &Ident, visibility: Visibility) -> bool {
-        match self.find_name(name) {
+        match self.find_name(name, false) {
             Some(existing) => {
                 match existing {
                     ScopeMemberRef::Decl { value, parent_path, .. } => {
@@ -920,7 +932,7 @@ impl Context {
     }
 
     pub fn resolve_alias(&self, path: &IdentPath) -> Option<IdentPath> {
-        let member = self.find_path(path)?;
+        let member = self.find_path(path, false)?;
 
         match member {
             ScopeMemberRef::Decl {
@@ -1268,7 +1280,7 @@ impl Context {
     }
 
     pub fn find_type(&self, name: &IdentPath) -> NameResult<(IdentPath, &Type)> {
-        match self.find_path(name) {
+        match self.find_path(name, false) {
             Some(ScopeMemberRef::Decl {
                 value: Decl::Type { ty, .. },
                 key,
@@ -1415,7 +1427,7 @@ impl Context {
     }
 
     pub fn find_iface(&self, name: &IdentPath) -> NameResult<IdentPath> {
-        match self.find_path(name) {
+        match self.find_path(name, false) {
             Some(ScopeMemberRef::Decl {
                 value:
                     Decl::Type {
@@ -1458,7 +1470,7 @@ impl Context {
             },
 
             None => {
-                match self.find_path(name) {
+                match self.find_path(name, false) {
                     Some(ScopeMemberRef::Decl { value: Decl::Type { forward: true, .. }, .. }) => {
                         Err(NameError::NotDefined { ident: name.clone() })
                     }
@@ -1506,7 +1518,7 @@ impl Context {
         expected: ExpectedKind
     ) -> NameError {
         let decl = self
-            .find_path(&name)
+            .find_path(&name, false)
             .expect("found def so decl must exist")
             .as_value()
             .expect("if def exists it must be a value not a namespace")
@@ -1591,7 +1603,7 @@ impl Context {
     }
 
     pub fn find_function(&self, name: &IdentPath) -> NameResult<(IdentPath, &[DeclFunctionOverload])> {
-        match self.find_path(name) {
+        match self.find_path(name, false) {
             Some(ScopeMemberRef::Decl {
                 value: Decl::Function { overloads, .. },
                 key,
@@ -2242,7 +2254,7 @@ impl Context {
         for uninit_name in uninit_names {
             let is_init_in_all = branch_contexts
                 .iter()
-                .all(|ctx| match ctx.find_name(&uninit_name).unwrap() {
+                .all(|ctx| match ctx.find_name(&uninit_name, false).unwrap() {
                     ScopeMemberRef::Decl {
                         value, parent_path, ..
                     } => match value {

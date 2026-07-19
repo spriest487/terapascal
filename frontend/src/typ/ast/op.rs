@@ -573,7 +573,7 @@ pub fn named_member_value(
             let mut full_path = path.clone();
             full_path.push(member_ident.clone());
 
-            match ctx.find_path(&full_path) {
+            match ctx.find_path(&full_path, false) {
                 Some(member) => {
                     let value = member_annotation(&member, member_ident.span.clone(), ctx);
 

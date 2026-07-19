@@ -1,0 +1,15 @@
+unit QualName;
+implementation
+
+function SayHello();
+begin
+    WriteLn('hello, world!');
+end;
+
+initialization
+    SayHello();
+    QualName.SayHello();
+    
+    // todo: improve error message
+    // QualName.QualName.SayHello();
+end

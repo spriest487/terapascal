@@ -452,7 +452,8 @@ fn overload_with_accessible_method_is_ambiguous() {
 fn overload_with_inaccessible_method_is_not_ambiguous() {
     let a_src = r"
         interface
-        type MyClass = class 
+
+        type MyClass = class
         private
             function A;
         end;

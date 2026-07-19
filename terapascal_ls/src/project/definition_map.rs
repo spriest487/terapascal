@@ -244,7 +244,7 @@ impl DefinitionMap {
         loop {
             let part = partial_path.last();
 
-            if let Some(scope_member) = ctx.find_path(&partial_path) {
+            if let Some(scope_member) = ctx.find_path(&partial_path, true) {
                 let value = member_annotation(&scope_member, part.span.clone(), ctx);
                 self.add_ident(part, &value, ctx);
             }
@@ -820,7 +820,7 @@ impl DefinitionMap {
             }
 
             Value::Namespace(path, ..) => {
-                if let Some(ScopeMemberRef::Scope { path }) = ctx.find_path(&path) {
+                if let Some(ScopeMemberRef::Scope { path }) = ctx.find_path(&path, true) {
                     let namespace = path.to_namespace();
                     self.add(at_span.clone(), namespace.path_span());
                 }

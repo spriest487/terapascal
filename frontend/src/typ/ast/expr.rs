@@ -246,7 +246,7 @@ pub fn handle_incomplete_expr(
 }
 
 fn typecheck_ident(ident: &Ident, span: &Span, ctx: &mut Context) -> TypeResult<Expr> {
-    let Some(decl) = ctx.find_name(ident) else {
+    let Some(decl) = ctx.find_name(ident, false) else {
         return Err(TypeError::from_name_err(
             NameError::NotFound {
                 ident: ident.clone().into(),
@@ -327,7 +327,7 @@ pub fn member_annotation(member: &ScopeMemberRef, span: Span, ctx: &Context) -> 
             ..
         } => {
             let alias_ref = ctx
-                .find_path(aliased)
+                .find_path(aliased, false)
                 .unwrap_or_else(|| panic!("invalid alias to {}", aliased));
 
             member_annotation(&alias_ref, span, ctx)

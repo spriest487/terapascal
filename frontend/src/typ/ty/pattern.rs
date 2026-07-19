@@ -90,7 +90,7 @@ impl MatchPattern {
     ) -> TypeResult<NameMatch> {
         // first try to match the whole path as a type name
         let find_type = ctx
-            .find_path(&name.ident)
+            .find_path(&name.ident, false)
             .map(|member| member_annotation(&member, name.span.clone(), ctx));
 
         if let Some(Value::Type(ty, ty_span)) = find_type {
@@ -163,7 +163,7 @@ impl MatchPattern {
         let variant_name_span = variant_name.path_span();
 
         let find_variant = ctx
-            .find_path(&variant_name)
+            .find_path(&variant_name, false)
             .map(|member| member_annotation(&member, name.span.clone(), ctx));
 
         let Some(Value::Type(Type::Variant(variant_def_name), ..)) = find_variant else {

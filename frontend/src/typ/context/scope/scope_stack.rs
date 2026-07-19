@@ -217,7 +217,10 @@ impl ScopeStack {
         Visitor: FnMut(&IdentPath, &Decl),
     {
         self.visit_members(
-            |member_path, _member| self.is_visible(&member_path),
+            |member_path, _member| {
+                let visible = self.is_visible(&member_path);
+                visible
+            },
             visitor,
         );
     }
@@ -245,28 +248,7 @@ impl ScopeStack {
         let current_path = self.current_path();
 
         match self.resolve_path(name) {
-            Some(ScopeMemberRef::Decl {
-                parent_path, value, ..
-            }) => {
-                let current_ns = current_path.to_namespace();
-
-                match value.visibility() {
-                    Some(Visibility::Interface) => true,
-
-                    Some(Visibility::Implementation) => {
-                        let decl_unit_ns = IdentPath::from_parts(parent_path.keys().cloned());
-                        current_ns == decl_unit_ns || current_ns.is_parent_of(&decl_unit_ns)
-                    },
-
-                    None => false,
-                }
-            },
-
-            Some(ScopeMemberRef::Scope { .. }) => {
-                let current_uses = current_path.all_used_namespaces();
-                current_uses.contains(&name)
-            },
-
+            Some(member_ref) => member_ref.is_visible_from(&current_path),
             None => false,
         }
     }

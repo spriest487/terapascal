@@ -1,34 +1,16 @@
 use crate::ast::FunctionDeclKind;
 use crate::ast::FunctionParamItem;
-use terapascal_common::ident::Ident;
 use crate::ast::TypeConstraint;
-use crate::typ::ast::specialize_func_decl;
-use crate::typ::ast::FunctionDecl;
-use crate::typ::ast::FunctionDeclContext;
-use crate::typ::ast::FunctionName;
-use crate::typ::ast::FunctionParamGroup;
-use crate::typ::ast::WhereClause;
+use crate::typ::ast::*;
 use crate::typ::builtin_displayable_name;
 use crate::typ::builtin_span;
-use crate::typ::test::expect_type_error;
-use crate::typ::test::module_from_src;
-use crate::typ::test::try_module_from_src;
-use crate::typ::test::try_module_from_srcs;
-use crate::typ::Context;
-use crate::typ::GenericError;
-use crate::typ::InvalidOverloadKind;
-use crate::typ::Primitive;
-use crate::typ::Type;
-use crate::typ::TypeArgList;
-use crate::typ::TypeError;
-use crate::typ::TypeName;
-use crate::typ::TypeParam;
-use crate::typ::TypeParamList;
-use crate::typ::TypeParamListItem;
+use crate::typ::test::*;
+use crate::typ::*;
 use std::fmt;
 use std::sync::Arc;
-use terapascal_common::CompileOpts;
+use terapascal_common::ident::Ident;
 use terapascal_common::span::Span;
+use terapascal_common::CompileOpts;
 
 fn test_span() -> Span {
     Span::zero("test")
@@ -292,9 +274,9 @@ fn calling_invisible_function_from_outside_unit_is_err() {
             "UnitA",
             r"
             interface
-            
+
             implementation
-        
+
             function A(x: Integer); overload;
             begin
             end;
@@ -315,7 +297,13 @@ fn calling_invisible_function_from_outside_unit_is_err() {
         ),
     ];
 
-    expect_not_visible_err("UnitA.A", try_module_from_srcs(srcs));
+    // global names shouldn't even be found in namespace where they're not visible
+    expect_type_error(try_module_from_srcs(srcs), |err| match err {
+        TypeError::NameError { err: NameError::NotFound { ident}, .. } => {
+            ident.to_string() == "A"
+        }
+        _ => false,
+    });
 }
 
 #[test]

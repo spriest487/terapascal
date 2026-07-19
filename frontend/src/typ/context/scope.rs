@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Write;
 use std::hash::Hash;
+use crate::ast::Visibility;
 
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Copy)]
 pub struct ScopeID(pub usize);
@@ -265,6 +266,44 @@ impl<'s> ScopeMemberRef<'s> {
             ScopeMemberRef::Scope { path } => {
                 path.to_namespace()
             }
+        }
+    }
+
+    pub fn is_visible_from(&self, current_path: &ScopePathRef) -> bool {
+        match self {
+            ScopeMemberRef::Decl {
+                parent_path, value, ..
+            } => {
+                let namespace = current_path.to_namespace();
+
+                match value.visibility() {
+                    Some(Visibility::Interface) => {
+                        true
+                    },
+
+                    Some(Visibility::Implementation) => {
+                        let decl_unit_ns = IdentPath::from_parts(parent_path.keys().cloned());
+                        namespace == decl_unit_ns || namespace.is_parent_of(&decl_unit_ns)
+                    },
+
+                    None => {
+                        true
+                    },
+                }
+            },
+
+            ScopeMemberRef::Scope { path } => {
+                if path.is_parent_of(&current_path) {
+                    return true;
+                }
+
+                let current_uses = current_path.all_used_namespaces();
+                let scope_path = path.to_namespace();
+
+                current_uses
+                    .iter()
+                    .any(|path_ref| **path_ref == scope_path)
+            },
         }
     }
 }

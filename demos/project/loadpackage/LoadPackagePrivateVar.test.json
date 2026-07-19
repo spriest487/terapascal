@@ -3,6 +3,6 @@
     "MyLib"
   ],
   "steps": [
-    { "error_regex": "is not visible in the current context" }
+    { "error_regex": "`MyPrivateVar` is not found in this scope" }
   ]
 }

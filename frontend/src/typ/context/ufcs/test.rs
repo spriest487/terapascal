@@ -86,15 +86,17 @@ fn finds_exported_ufcs_func_from_other_unit() {
 #[test]
 fn doesnt_find_private_ufcs_func_from_other_unit() {
     let a_src = r"
-        implementation
+        interface
         
         type UFCSTarget = class
         end;
-        
+
+        implementation
         end.";
 
     let b_src = r"
         implementation
+
         function TargetMethod(t: A.UFCSTarget);
         begin
         end;

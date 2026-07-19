@@ -86,7 +86,7 @@ fn find_ufcs_free_functions(ty: &Type, ctx: &Context) -> Vec<InstanceMethod> {
     
     // eprintln!("members of {}: current scopes: {}", ty, ctx.scopes);
 
-    ctx.scopes.visit_visible(|decl_path, decl| {        
+    ctx.scopes.visit_visible(|decl_path, decl| {
         // ignore decls that aren't members of one of the search namespaces
         if !search_namespaces.iter().any(|search_ns| search_ns.is_parent_of(decl_path)) {
             return;
@@ -96,7 +96,7 @@ fn find_ufcs_free_functions(ty: &Type, ctx: &Context) -> Vec<InstanceMethod> {
             Decl::Function { overloads, .. } => overloads,
             _ => return,
         };
-        
+
         for overload in overloads {
             // ignore decls that can't possibly be called via UFCS since they have 0 params
             let Some(self_ty) = &overload.decl().param_type(0) else {

@@ -108,7 +108,7 @@ fn typecheck_unit_decl(
 }
 
 fn typecheck_unit_uses_decl(use_item: &ast::UseDeclItem, ctx: &mut Context) -> TypeResult<()> {
-    match ctx.find_path(&use_item.ident) {
+    match ctx.find_path(&use_item.ident, true) {
         // path refers to a known unit path (by alias or directly by its canon name)
         Some(ScopeMemberRef::Scope { path }) => {
             let unit_canon_ident = IdentPath::from_parts(path.keys().cloned());

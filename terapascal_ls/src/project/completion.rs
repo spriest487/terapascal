@@ -238,7 +238,7 @@ fn namespace_members_to_completions(
     ctx: &Context,
     entries: &mut Vec<lsp::CompletionItem>,
 ) {
-    let Some(ScopeMemberRef::Scope { path, .. }) = ctx.find_path(namespace) else {
+    let Some(ScopeMemberRef::Scope { path, .. }) = ctx.find_path(namespace, true) else {
         eprintln!("[resolve_completions] not a namespace path: {namespace}");
         return;
     };
