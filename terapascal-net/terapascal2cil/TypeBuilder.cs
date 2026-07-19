@@ -506,7 +506,8 @@ public class TypeBuilder {
                 var systemFuncInstance = new GenericInstanceMethod(systemFunc);
                 systemFuncInstance.GenericArguments.Add(field.Field.FieldType);
 
-                body.Emit(OpCodes.Ldarg_1);
+                var weak = field.Type is IR.WeakObjectType;
+                body.Emit(weak ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                 body.Emit(OpCodes.Call, systemFuncInstance);
             });
 
@@ -523,7 +524,6 @@ public class TypeBuilder {
         Func<LayoutField, bool> predicate,
         Action<LayoutField> emit
     ) {
-        var typeSystem = this.assemblyBuilder.TypeSystem;
         var body = methodDef.Body.GetILProcessor();
 
         var selfRefVar = new VariableDefinition(variantTypeRef.MakeByReferenceType());
@@ -631,9 +631,6 @@ public class TypeBuilder {
         methodDef.Parameters.Add(new ParameterDefinition(this.TypedReferenceType) {
             Name = "self",
         });
-        methodDef.Parameters.Add(new ParameterDefinition(typeSystem.Boolean) {
-            Name = "weak",
-        });
 
         return methodDef;
     }
@@ -663,7 +660,8 @@ public class TypeBuilder {
                 var systemFuncInstance = new GenericInstanceMethod(systemFunc);
                 systemFuncInstance.GenericArguments.Add(field.Field.FieldType);
 
-                body.Emit(OpCodes.Ldarg_1);
+                var weak = field.Type is IR.WeakObjectType;
+                body.Emit(weak ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
                 body.Emit(OpCodes.Call, systemFuncInstance);
             });
 

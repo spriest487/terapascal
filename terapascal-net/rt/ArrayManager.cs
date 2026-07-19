@@ -76,7 +76,7 @@ public static class ArrayManager {
 
             if (elementType.IsValueType) {
                 if (Object.rcMethods.TryGetValue(elementType, out var rcMethodTable)) {
-                    rcMethodTable.ArrayRelease(array, weak: false);
+                    rcMethodTable.ArrayRelease(array);
                 }
             } else {
                 for (var i = 0; i < array.Length; i += 1) {

@@ -2,8 +2,8 @@
 
 namespace Terapascal.Runtime;
 
-public delegate void RcMethod(TypedReference obj, bool weak);
-public delegate void RcArrayMethod(Array array, bool weak);
+public delegate void RcMethod(TypedReference obj);
+public delegate void RcArrayMethod(Array array);
 
 internal struct RcMethodTable {
     internal RcMethod Retain;

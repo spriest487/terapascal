@@ -476,27 +476,6 @@ public class InstructionBuilder {
         }
     }
 
-    private void EmitRelease(IR.IType valueType) {
-
-    }
-
-    private void EmitRetain(IR.IType valueType, Action loadValueAddr) {
-        var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
-
-        const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
-        this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
-
-        var retainInstance = new GenericInstanceMethod(this.rcRetainMethod);
-        retainInstance.GenericArguments.Add(retainType);
-
-        loadValueAddr();
-
-        // weak flag
-        this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-
-        this.body.Emit(OpCodes.Call, retainInstance);
-    }
-
     private void LoadFieldRef(IR.IRef argRef, IR.FieldID fieldID, IR.IType baseType) {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
                     

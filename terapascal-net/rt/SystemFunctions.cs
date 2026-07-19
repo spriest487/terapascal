@@ -188,11 +188,11 @@ public static class SystemFunctions {
         Object.rcMethods[typeof(T)] = new RcMethodTable {
             Retain = retainer,
             Release = releaser,
-            ArrayRelease = (erasedArray, weak) => {
+            ArrayRelease = erasedArray => {
                 var array = (T[])erasedArray;
                 for (var i = 0; i < array.Length; i += 1) {
                     var elementRef = __makeref(array[i]);
-                    releaser(elementRef, weak);
+                    releaser(elementRef);
                 }
             },
         };
@@ -207,7 +207,7 @@ public static class SystemFunctions {
             case var _ when obj.GetType().IsValueType: {
                 if (Object.rcMethods.TryGetValue(obj.GetType(), out var rcMethodTable)) {
                     var objRef = __makeref(obj);
-                    rcMethodTable.Retain(objRef, weak);
+                    rcMethodTable.Retain(objRef);
                 }
 
                 break;
@@ -248,7 +248,7 @@ public static class SystemFunctions {
             case var value when obj.GetType().IsValueType: {
                 if (Object.rcMethods.TryGetValue(obj.GetType(), out var rcMethodTable)) {
                     var objRef = __makeref(obj);
-                    rcMethodTable.Release(objRef, weak);
+                    rcMethodTable.Release(objRef);
                 }
 
                 break;
