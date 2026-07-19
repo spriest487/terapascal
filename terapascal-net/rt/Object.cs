@@ -25,8 +25,8 @@ public class Object {
     }
 
     [SpecialName]
-    public static bool Is<T>(object any) {
-        if (any is not T instance) {
+    public static bool Is<A, B>(A any) {
+        if (any is not B instance) {
             return false;
         }
 

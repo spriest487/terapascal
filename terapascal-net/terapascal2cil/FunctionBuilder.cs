@@ -253,7 +253,7 @@ public class FunctionBuilder {
     }
 
     private MethodDefinition CreateFunctionMethod(IR.FunctionRef funcRef) {
-        var attrs = MethodAttributes.Static | MethodAttributes.Assembly;
+        var attrs = MethodAttributes.Static | MethodAttributes.Assembly | MethodAttributes.HideBySig;
 
         var metadata = this.assemblyBuilder.LoadedMetadata;
 

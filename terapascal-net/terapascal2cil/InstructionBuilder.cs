@@ -277,13 +277,16 @@ public class InstructionBuilder {
                     Out: var outRef,
                     Arg: var argVal,
                     ValueType: var valueType,
+                    IsType: var isType,
                 }: {
                     var valueTypeRef = typeBuilder.BuildType(valueType);
-                    
+                    var isTypeRef = typeBuilder.BuildType(isType);
+
                     var isMethodRef = this.assemblyBuilder.TypeBuilder.ObjectIsMethod;
 
                     var isMethodInstance = new GenericInstanceMethod(isMethodRef);
                     isMethodInstance.GenericArguments.Add(valueTypeRef);
+                    isMethodInstance.GenericArguments.Add(isTypeRef);
 
                     var isMethodInstanceRef = this.assemblyBuilder.Module.ImportReference(isMethodInstance);
 
