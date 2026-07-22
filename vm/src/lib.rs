@@ -2888,7 +2888,7 @@ impl Vm {
             ir::Type::Array { element, dim } => {
                 let name = self.find_type_info_name(element)?
                     .and_then(|element_name| (!element_name.is_empty())
-                        .then(|| format!("array {dim} of {element_name}")))
+                        .then(|| format!("array[{dim}] of {element_name}")))
                     .unwrap_or(String::new());
 
                 self.new_type_info(ty, &name, flags)

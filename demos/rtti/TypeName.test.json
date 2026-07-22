@@ -1,0 +1,13 @@
+{
+  "steps": [
+    { "output": "class is named 'TypeName.MyClass'" },
+    { "output": "integer is named 'System.Int32'" },
+    { "output": "object is named 'Object'" },
+    { "output": "weak object is named 'weak Object'" },
+    { "output": "array is named 'array of TypeName.MyClass'" },
+    { "output": "weak array is named 'weak array of TypeName.MyClass'" },
+    { "output": "static array is named 'array[2] of TypeName.MyClass'" },
+    { "output": "set flags 1 is named 'TypeName.MyBytes'" },
+    { "output": "set flags 2 is named 'TypeName.MyOtherBytes'" }
+  ]
+}
