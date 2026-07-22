@@ -66,9 +66,51 @@ public class InstructionBuilder {
         }
     }
 
-    public void AddInstructions(IReadOnlyList<IR.IInstruction> instructions) {
+    private void EmitRcMethodCall(
+        string methodName,
+        ref MethodReference? cachedMethod,
+        IR.IRef valueRef,
+        IR.IType valueType
+    ) {
         var typeBuilder = this.assemblyBuilder.TypeBuilder;
         var metadata = this.assemblyBuilder.LoadedMetadata;
+
+        // TODO: native generics
+        // TODO: deep object refs in structs
+        // TODO: generic param types may be objects
+        if (!metadata.TypeContainsObjectRefs(valueType)) {
+            // emit nothing for concrete types that definitely won't be registered for RC callbacks
+            return;
+        }
+
+        cachedMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
+
+        var methodInstance = new GenericInstanceMethod(cachedMethod);
+
+        if (valueType is IR.WeakObjectType(var weakObjectID)) {
+            var strongTypeRef = typeBuilder.BuildType(weakObjectID.ToObjectType());
+            methodInstance.GenericArguments.Add(strongTypeRef);
+
+            // weak references: the actual object reference is a field inside the reference struct
+            this.LoadRefAddr(valueRef);
+
+            this.body.Emit(OpCodes.Ldflda, typeBuilder.CreateWeakObjectRefField(strongTypeRef));
+
+            // weak flag
+            this.body.Emit(OpCodes.Ldc_I4_1);
+        } else {
+            var valueTypeRef = typeBuilder.BuildType(valueType);
+            methodInstance.GenericArguments.Add(valueTypeRef);
+
+            this.LoadRefAddr(valueRef);
+            this.body.Emit(OpCodes.Ldc_I4_0);
+        }
+
+        this.body.Emit(OpCodes.Call, methodInstance);
+    }
+
+    public void AddInstructions(IReadOnlyList<IR.IInstruction> instructions) {
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
 
         for (var pc = 0; pc < instructions.Count; pc += 1) {
             var instruction = instructions[pc];
@@ -80,60 +122,27 @@ public class InstructionBuilder {
                 }
 
                 case IR.RetainInstruction { At: var atRef, ValueType: var valueType }: {
-                    // TODO: native generics
-                    // TODO: deep object refs in structs
-                    // TODO: generic param types may be objects
-                    if (!metadata.TypeContainsObjectRefs(valueType)) {
-                        continue;
-                    }
-
-                    var retainType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
-
-                    const string methodName = nameof(Runtime.SystemFunctions.RcRetain);
-                    this.rcRetainMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
-
-                    var retainInstance = new GenericInstanceMethod(this.rcRetainMethod);
-                    retainInstance.GenericArguments.Add(retainType);
-
-                    this.LoadRefAddr(atRef);
-
-                    // weak flag
-                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-
-                    this.body.Emit(OpCodes.Call, retainInstance);
-                    continue;
+                    this.EmitRcMethodCall(
+                        nameof(Runtime.SystemFunctions.RcRetain),
+                        ref this.rcRetainMethod,
+                        atRef,
+                        valueType
+                    );
+                    break;
                 }
 
                 case IR.ReleaseInstruction { At: var atRef, ValueType: var valueType }: {
-                    // TODO: native generics
-                    // TODO: deep object refs in structs
-                    // TODO: generic param types may be objects
-                    if (!metadata.TypeContainsObjectRefs(valueType)) {
-                        continue;
-                    }
-
-                    var releaseType = this.assemblyBuilder.TypeBuilder.BuildType(valueType);
-
-                    const string methodName = nameof(Runtime.SystemFunctions.RcRelease);
-                    this.rcReleaseMethod ??= this.assemblyBuilder.FindRuntimeFunction(methodName);
-
-                    var releaseInstance = new GenericInstanceMethod(this.rcReleaseMethod);
-                    releaseInstance.GenericArguments.Add(releaseType);
-
-                    // pass arg by ref
-                    this.LoadRefAddr(atRef);
-
-                    // weak flag
-                    this.body.Emit(valueType is IR.WeakObjectType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);
-                    this.body.Emit(OpCodes.Call, releaseInstance);
-
+                    this.EmitRcMethodCall(
+                        nameof(Runtime.SystemFunctions.RcRelease),
+                        ref this.rcReleaseMethod,
+                        atRef,
+                        valueType
+                    );
                     break;
                 }
 
                 case IR.MoveInstruction { Out: var outRef, NewValue: var newVal }: {
-                    this.StoreRef(outRef, () => {
-                        this.LoadValue(newVal);
-                    });
+                    this.EmitMove(outRef, newVal);
                     break;
                 }
 
@@ -192,84 +201,7 @@ public class InstructionBuilder {
                     Value: var val,
                     Type: var castToType,
                 }: {
-                    this.StoreRef(outRef, () => {
-                        this.LoadValue(val);
-
-                        switch (castToType) {
-                            case IR.I8Type: {
-                                this.body.Emit(OpCodes.Conv_I1);
-                                break;
-                            }
-                            case IR.BoolType:
-                            case IR.U8Type: {
-                                this.body.Emit(OpCodes.Conv_U1);
-                                break;
-                            }
-                            case IR.I16Type: {
-                                this.body.Emit(OpCodes.Conv_I2);
-                                break;
-                            }
-                            case IR.U16Type: {
-                                this.body.Emit(OpCodes.Conv_U2);
-                                break;
-                            }
-                            case IR.I32Type: {
-                                this.body.Emit(OpCodes.Conv_I4);
-                                break;
-                            }
-                            case IR.U32Type: {
-                                this.body.Emit(OpCodes.Conv_U4);
-                                break;
-                            }
-                            case IR.I64Type: {
-                                this.body.Emit(OpCodes.Conv_I8);
-                                break;
-                            }
-                            case IR.U64Type: {
-                                this.body.Emit(OpCodes.Conv_U8);
-                                break;
-                            }
-                            case IR.TempRefType:
-                            case IR.PointerType:
-                            case IR.ISizeType: {
-                                this.body.Emit(OpCodes.Conv_I);
-                                break;
-                            }
-                            case IR.USizeType: {
-                                this.body.Emit(OpCodes.Conv_U);
-                                break;
-                            }
-
-                            case IR.F32Type: {
-                                this.body.Emit(OpCodes.Conv_R4);
-                                break;
-                            }
-                            case IR.F64Type: {
-                                this.body.Emit(OpCodes.Conv_R8);
-                                break;
-                            }
-
-                            case IR.ObjectType:
-                            case IR.WeakObjectType: {
-                                var typeRef = typeBuilder.BuildType(castToType);
-                                this.body.Emit(OpCodes.Castclass, typeRef);
-                                break;
-                            }
-
-                            case IR.NothingType:
-                            case IR.FunctionType:
-                            case IR.StructType:
-                            case IR.VariantType:
-                            case IR.ArrayType: {
-                                // no conversion, typechecking should prevent casts like this
-                                break;
-                            }
-                            
-                            default: {
-                                throw new NotImplementedException($"conversion to {castToType.ToString(metadata)}");
-                            }
-                        }
-                    });
+                    this.EmitCast(outRef, val, castToType);
                     break;
                 }
 
@@ -282,16 +214,35 @@ public class InstructionBuilder {
                     var valueTypeRef = typeBuilder.BuildType(valueType);
                     var isTypeRef = typeBuilder.BuildType(isType);
 
-                    var isMethodRef = this.assemblyBuilder.TypeBuilder.ObjectIsMethod;
-
+                    var isMethodRef = typeBuilder.ObjectIsMethod;
                     var isMethodInstance = new GenericInstanceMethod(isMethodRef);
-                    isMethodInstance.GenericArguments.Add(valueTypeRef);
-                    isMethodInstance.GenericArguments.Add(isTypeRef);
-
-                    var isMethodInstanceRef = this.assemblyBuilder.Module.ImportReference(isMethodInstance);
 
                     this.StoreRef(outRef, () => {
-                        this.LoadValue(argVal);
+                        // if the arg value is a weak reference, and the target type is a non-weak object,
+                        // we need to load the weak ref's inner object pointer instead, so that Object.Is()
+                        // will compare it as an object type + do a liveness check
+                        if (valueType is IR.WeakObjectType(var weakObjectID) && isType is IR.ObjectType) {
+                            var strongValueType = typeBuilder.BuildType(weakObjectID.ToObjectType());
+
+                            isMethodInstance.GenericArguments.Add(strongValueType);
+
+                            if (argVal is not IR.RefValue(var argRef)) {
+                                throw new InvalidDataException("object reference cannot be a literal");
+                            }
+
+                            this.LoadRefAddr(argRef);
+
+                            this.body.Emit(OpCodes.Ldfld, typeBuilder.CreateWeakObjectRefField(strongValueType));
+                        } else {
+                            isMethodInstance.GenericArguments.Add(valueTypeRef);
+
+
+                            this.LoadValue(argVal);
+                        }
+
+                        isMethodInstance.GenericArguments.Add(isTypeRef);
+                        var isMethodInstanceRef = this.assemblyBuilder.Module.ImportReference(isMethodInstance);
+
                         this.body.Emit(OpCodes.Call, isMethodInstanceRef);
                     });
 
@@ -472,6 +423,166 @@ public class InstructionBuilder {
                     Console.Error.WriteLine($"skipping unimplemented instruction type: {instruction.GetType()}");
                     break;
                 }
+            }
+        }
+    }
+
+    private void CastValue(IR.IType castToType) {
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+        var metadata = this.assemblyBuilder.LoadedMetadata;
+
+        switch (castToType) {
+            case IR.I8Type: {
+                this.body.Emit(OpCodes.Conv_I1);
+                break;
+            }
+            case IR.BoolType:
+            case IR.U8Type: {
+                this.body.Emit(OpCodes.Conv_U1);
+                break;
+            }
+            case IR.I16Type: {
+                this.body.Emit(OpCodes.Conv_I2);
+                break;
+            }
+            case IR.U16Type: {
+                this.body.Emit(OpCodes.Conv_U2);
+                break;
+            }
+            case IR.I32Type: {
+                this.body.Emit(OpCodes.Conv_I4);
+                break;
+            }
+            case IR.U32Type: {
+                this.body.Emit(OpCodes.Conv_U4);
+                break;
+            }
+            case IR.I64Type: {
+                this.body.Emit(OpCodes.Conv_I8);
+                break;
+            }
+            case IR.U64Type: {
+                this.body.Emit(OpCodes.Conv_U8);
+                break;
+            }
+            case IR.TempRefType:
+            case IR.PointerType:
+            case IR.ISizeType: {
+                this.body.Emit(OpCodes.Conv_I);
+                break;
+            }
+            case IR.USizeType: {
+                this.body.Emit(OpCodes.Conv_U);
+                break;
+            }
+
+            case IR.F32Type: {
+                this.body.Emit(OpCodes.Conv_R4);
+                break;
+            }
+            case IR.F64Type: {
+                this.body.Emit(OpCodes.Conv_R8);
+                break;
+            }
+
+            case IR.ObjectType:
+            case IR.WeakObjectType: {
+                var typeRef = typeBuilder.BuildType(castToType);
+                this.body.Emit(OpCodes.Castclass, typeRef);
+                break;
+            }
+
+            case IR.NothingType:
+            case IR.FunctionType:
+            case IR.StructType:
+            case IR.VariantType:
+            case IR.ArrayType: {
+                // no conversion, typechecking should prevent casts like this
+                break;
+            }
+
+            default: {
+                throw new NotImplementedException($"conversion to {castToType.ToString(metadata)}");
+            }
+        }
+    }
+
+    private void EmitMove(IR.IRef outRef, IR.IValue newVal) {
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+
+        // automatic conversion between weak and strong refs
+        // this only needs to be implemented for mov and cast because no other operations are valid
+        // for operands of those types
+        var outType = this.GetRefType(outRef);
+        var newValType = this.GetValueType(newVal);
+
+        switch (outType, newValType) {
+            case (IR.WeakObjectType(var objectID), not IR.WeakObjectType): {
+                var objectType = typeBuilder.BuildType(objectID.ToObjectType());
+
+                this.LoadRefAddr(outRef);
+                this.LoadValue(newVal);
+
+                this.body.Emit(OpCodes.Stfld, typeBuilder.CreateWeakObjectRefField(objectType));
+                break;
+            }
+
+            case (not IR.WeakObjectType, IR.WeakObjectType(var objectID)): {
+                var objectType = typeBuilder.BuildType(objectID.ToObjectType());
+                this.StoreRef(outRef, () => {
+                    this.LoadRefAddr(outRef);
+                    this.body.Emit(OpCodes.Ldfld, typeBuilder.CreateWeakObjectRefField(objectType));
+                });
+                break;
+            }
+
+            default: {
+                this.StoreRef(outRef, () => {
+                    this.LoadValue(newVal);
+                });
+                break;
+            }
+        }
+    }
+
+    private void EmitCast(IR.IRef outRef, IR.IValue val, IR.IType castToType) {
+        var typeBuilder = this.assemblyBuilder.TypeBuilder;
+
+        var newValType = this.GetValueType(val);
+
+        switch (castToType, newValType) {
+            case (IR.WeakObjectType(var objectID), not IR.WeakObjectType): {
+                var objectType = objectID.ToObjectType();
+                var objectTypeRef = typeBuilder.BuildType(objectType);
+
+                this.LoadRefAddr(outRef);
+
+                this.LoadValue(val);
+                this.CastValue(objectType);
+
+                this.body.Emit(OpCodes.Stfld, typeBuilder.CreateWeakObjectRefField(objectTypeRef));
+                break;
+            }
+
+            case (not IR.WeakObjectType, IR.WeakObjectType(var objectID)): {
+                var objectType = typeBuilder.BuildType(objectID.ToObjectType());
+
+                this.StoreRef(outRef, () => {
+                    this.LoadRefAddr(outRef);
+
+                    this.body.Emit(OpCodes.Ldfld, typeBuilder.CreateWeakObjectRefField(objectType));
+
+                    this.CastValue(castToType);
+                });
+                break;
+            }
+
+            default: {
+                this.StoreRef(outRef, () => {
+                    this.LoadValue(val);
+                    this.CastValue(castToType);
+                });
+                break;
             }
         }
     }
@@ -711,7 +822,7 @@ public class InstructionBuilder {
 
         // for complex types, we need to zero-initialize them immediately because we might generate code
         // that creates references to their elements without initializing them, which the CLR will not like
-        if (type.IsComplex()) {
+        if (type.IsComplex() || type is IR.WeakObjectType) {
             this.body.Emit(OpCodes.Ldloca, index);
             this.body.Emit(OpCodes.Initobj, typeRef);
         }
@@ -721,7 +832,7 @@ public class InstructionBuilder {
         if (target is not IR.RefValue(var targetRef)) {
             throw new InvalidDataException("illegal instruction: call target value may only be a ref");
         }
-        
+
         var metadata = this.assemblyBuilder.LoadedMetadata;
         
         if (targetRef is IR.GlobalRef(IR.FunctionGlobalRef(var funcRef))) {
@@ -773,11 +884,6 @@ public class InstructionBuilder {
         }
 
         var funcMethod = this.assemblyBuilder.FunctionBuilder.GetFunctionMethod(funcRef);
-        if (funcMethod == null) {
-            var funcDisplay = funcRef.ToString(this.assemblyBuilder.LoadedMetadata);
-            var msg = $"invalid instruction: couldn't find function: {funcDisplay}";
-            throw new InvalidDataException(msg);
-        }
 
         this.body.Emit(OpCodes.Call, funcMethod);
     }
@@ -1107,6 +1213,7 @@ public class InstructionBuilder {
             IR.LiteralValue<nint> => IR.IType.ISize,
             IR.LiteralValue<nuint> => IR.IType.USize,
             IR.RefValue(var @ref) => this.GetRefType(@ref),
+            IR.DefaultValue(var valueType) => valueType,
             IR.SizeOfValue => IR.IType.I32,
             _ => throw new NotImplementedException($"value {val}"),
         };

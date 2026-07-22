@@ -38,6 +38,29 @@ public class Object {
     }
 }
 
-public unsafe class ClosureBase : Object { 
+public unsafe class ClosureBase : Object {
     public void* functionPointer;
+}
+
+public struct WeakObjectRef<T> where T : class {
+    public T objectRef;
+
+    static WeakObjectRef() {
+        Object.rcMethods.Add(typeof(WeakObjectRef<T>), new RcMethodTable {
+            Retain = selfRef => {
+                ref var self = ref __refvalue(selfRef, WeakObjectRef<T>);
+                SystemFunctions.RcRetain(ref self.objectRef, weak: true);
+            },
+            Release = selfRef => {
+                ref var self = ref __refvalue(selfRef, WeakObjectRef<T>);
+                SystemFunctions.RcRelease(ref self.objectRef, weak: true);
+            },
+            ArrayRelease = erasedArray => {
+                var array = (WeakObjectRef<T>[])erasedArray;
+                for (var i = 0; i < array.Length; i += 1) {
+                    SystemFunctions.RcRelease(ref array[i].objectRef, weak: true);
+                }
+            },
+        });
+    }
 }

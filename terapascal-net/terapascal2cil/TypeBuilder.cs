@@ -63,6 +63,8 @@ public class TypeBuilder {
     private readonly TypeDefinition rcActionTypeDef;
     private readonly MethodReference registerRcActionsMethodRef;
 
+    private readonly TypeReference weakObjectType;
+
     public TypeReference ExceptionType { get; }
     public TypeReference CLRStringType { get; }
     public TypeReference ValueType { get; }
@@ -135,6 +137,9 @@ public class TypeBuilder {
         this.ObjectCreateMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Create");
         this.ObjectIsMethod = objectBaseTypeDef.Methods.Single(m => m.Name == "Is");
 
+        var weakObjectTypeRef = this.assemblyBuilder.GetRuntimeTypeRef("WeakObjectRef`1", true);
+        this.weakObjectType = this.assemblyBuilder.Module.ImportReference(weakObjectTypeRef);
+
         var arrayManagerTypeDef = this.assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.ArrayManager), false)
                 .Resolve()
             ?? throw new InvalidDataException($"missing {nameof(Runtime.ArrayManager)} class in runtime library");
@@ -188,8 +193,8 @@ public class TypeBuilder {
             IR.FunctionType(var sig) => this.BuildFunctionTypeDef(sig),
             IR.PointerType(var inner) => this.RegisterSimpleType(type, this.BuildType(inner).MakePointerType()),
             IR.TempRefType(var inner) => this.RegisterSimpleType(type, this.BuildType(inner).MakeByReferenceType()),
-            IR.ObjectType(var id) => this.BuildClassTypeRef(id),
-            IR.WeakObjectType(var id) => this.BuildClassTypeRef(id),
+            IR.ObjectType(var id) => this.BuildObjectTypeRef(id),
+            IR.WeakObjectType(var id) => this.BuildWeakType(id),
             _ => throw new ArgumentException($"unhandled IR type: {type}"),
         };
 
@@ -201,6 +206,19 @@ public class TypeBuilder {
     private TypeReference RegisterSimpleType(IR.IType type, TypeReference simpleTypeRef) {
         this.cache.RegisterType(type, simpleTypeRef);
         return simpleTypeRef;
+    }
+
+    private TypeReference BuildWeakType(IR.IObjectID objectID) {
+        var innerTypeRef = this.BuildType(objectID.ToObjectType());
+
+        var weakRefInstance = new GenericInstanceType(this.weakObjectType);
+        weakRefInstance.GenericArguments.Add(innerTypeRef);
+
+        this.assemblyBuilder.Module.ImportReference(weakRefInstance);
+
+        this.cache.RegisterType(objectID.ToWeakObjectType(), weakRefInstance);
+
+        return weakRefInstance;
     }
 
     public static MethodReference FindCustomAttributeConstructor(TypeDefinition attrTypeDef, params Type[]? paramTypes) {
@@ -235,6 +253,16 @@ public class TypeBuilder {
         return name;
     }
 
+    public FieldReference CreateWeakObjectRefField(TypeReference objectType) {
+        var weakObjectDef = this.weakObjectType.Resolve();
+        var weakRefType = weakObjectDef.MakeGenericInstanceType(objectType);
+
+        var objectRefType = weakObjectDef.GenericParameters.Single();
+        var fieldRef = new FieldReference(nameof(Runtime.WeakObjectRef<>.objectRef), objectRefType, weakRefType);
+
+        return this.assemblyBuilder.Module.ImportReference(fieldRef);
+    }
+
     private TypeReference BuildArrayTypeRef(IR.IType element, ulong length) {
         this.BuildType(element, out var elementID);
         var arraySig = new ArraySig(elementID, length);
@@ -245,7 +273,7 @@ public class TypeBuilder {
         return typeDef;
     }
 
-    private TypeReference BuildClassTypeRef(IR.IObjectID id) {
+    private TypeReference BuildObjectTypeRef(IR.IObjectID id) {
         var classTypeRef = id switch {
             IR.AnyObjectID => this.assemblyBuilder.Module.TypeSystem.Object,
             IR.ClassObjectID(var classID) => this.BuildStructDef(classID),
@@ -257,7 +285,8 @@ public class TypeBuilder {
         };
 
         this.cache.RegisterType(id.ToObjectType(), classTypeRef);
-        this.cache.RegisterType(id.ToWeakObjectType(), classTypeRef);
+        this.BuildWeakType(id);
+
         return classTypeRef;
     }
 

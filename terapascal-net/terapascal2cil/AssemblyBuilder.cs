@@ -175,7 +175,7 @@ public class AssemblyBuilder : IDisposable {
     }
 
 
-    public TypeReference GetRuntimeTypeRef(string name, bool valueType) {
+    public TypeReference GetRuntimeTypeRef(string name, bool valueType, bool import = true) {
         var typeRef = new TypeReference("Terapascal.Runtime",
             name,
             this.RuntimeLibrary.MainModule,
@@ -183,7 +183,11 @@ public class AssemblyBuilder : IDisposable {
             valueType
         );
 
-        return this.Module.ImportReference(typeRef.Resolve());
+        if (!import) {
+            return typeRef;
+        }
+
+        return this.Module.ImportReference(typeRef);
     }
 
     public FieldReference GetStringLiteralRef(IR.StringID id) {

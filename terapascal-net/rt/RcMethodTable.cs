@@ -1,5 +1,3 @@
-#nullable disable
-
 namespace Terapascal.Runtime;
 
 public delegate void RcMethod(TypedReference obj);
