@@ -654,7 +654,7 @@ public class TypeBuilder {
 
         var actionName = retain ? "retain" : "release";
 
-        var methodDef = new MethodDefinition($"__<{actionName}>", attrs, typeSystem.Void);
+        var methodDef = new MethodDefinition($".{actionName}", attrs, typeSystem.Void);
         typeDef.Methods.Add(methodDef);
 
         methodDef.Parameters.Add(new ParameterDefinition(this.TypedReferenceType) {

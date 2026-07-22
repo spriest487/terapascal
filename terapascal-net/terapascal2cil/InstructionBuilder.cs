@@ -577,6 +577,24 @@ public class InstructionBuilder {
                 break;
             }
 
+            // specifically for weak ref upgrades: when casting a reference to a weak object ref
+            // to a reference to a strong object ref, reference the inner field instead
+            case (
+                IR.TempRefType(not IR.WeakObjectType),
+                IR.TempRefType(IR.WeakObjectType(var objectID))
+            ): {
+                var objectType = typeBuilder.BuildType(objectID.ToObjectType());
+
+                this.StoreRef(outRef, () => {
+                    this.LoadValue(val);
+
+                    this.body.Emit(OpCodes.Ldflda, typeBuilder.CreateWeakObjectRefField(objectType));
+
+                    this.CastValue(castToType);
+                });
+                break;
+            }
+
             default: {
                 this.StoreRef(outRef, () => {
                     this.LoadValue(val);

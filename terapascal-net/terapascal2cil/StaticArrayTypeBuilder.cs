@@ -437,7 +437,7 @@ public class StaticArrayTypeBuilder {
             var systemFuncInstance = new GenericInstanceMethod(systemFunc);
             systemFuncInstance.GenericArguments.Add(arrayTypeDef.Fields[i].FieldType);
 
-            body.Emit(OpCodes.Ldarg_1);
+            body.Emit(OpCodes.Ldc_I4_0);
             body.Emit(OpCodes.Call, systemFuncInstance);
         }
 
