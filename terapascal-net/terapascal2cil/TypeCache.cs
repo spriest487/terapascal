@@ -21,7 +21,7 @@ internal class TypeCache {
 
     private int nextID;
 
-    public IEnumerable<IR.IType> AllTypes => this.types.Values;
+    public IReadOnlyDictionary<TypeID, IR.IType> Types => this.types;
 
     public TypeCache() {
         this.types = [];

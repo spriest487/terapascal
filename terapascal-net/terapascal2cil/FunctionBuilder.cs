@@ -41,7 +41,6 @@ public class FunctionBuilder {
 
                     // TODO: native generics
                     // eagerly instantiate non-generic functions
-                    invocationParams.Clear();
                     funcInfo.Identity.GetInvocationTypeParams(this.assemblyBuilder.LoadedMetadata, invocationParams);
 
                     if (invocationParams.Count == 0) {
@@ -121,6 +120,16 @@ public class FunctionBuilder {
         };
 
         var implMethodDef = this.CreateMethodWithSig(method.Name, implAttrs, methodSig);
+        if (implMethodDef.IsStatic) {
+            for (var i = 0; i < method.Params.Count; i += 1) {
+                implMethodDef.Parameters[i].Name = method.Params[i].Name;
+            }
+        } else {
+            for (var i = 1; i < method.Params.Count; i += 1) {
+                implMethodDef.Parameters[i - 1].Name = method.Params[i].Name;
+            }
+        }
+
         implMethodDef.HasThis = true;
 
         implTypeDef.Methods.Add(implMethodDef);
@@ -325,6 +334,10 @@ public class FunctionBuilder {
         }
 
         var methodDef = this.CreateMethodWithSig(name, attrs, sig);
+        for (var i = 0; i < funcInfo.Params.Count; i += 1) {
+            methodDef.Parameters[i].Name = funcInfo.Params[i].Name;
+        }
+
         declaringTypeDef.Methods.Add(methodDef);
 
         return methodDef;

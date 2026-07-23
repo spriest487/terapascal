@@ -3,7 +3,9 @@
 #nullable disable
 namespace Terapascal.Runtime;
 
+[Flags]
 public enum TypeFlags : ulong {
+    None = 0,
     Value = 1 << 0,
     Weak = 1 << 1,
     Array = 1 << 2,

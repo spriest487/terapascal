@@ -20,8 +20,11 @@ public class AssemblyBuilder : IDisposable {
     private readonly Dictionary<IR.StringID, FieldDefinition> stringLitFields;
     private readonly Dictionary<IR.VariableID, FieldDefinition> globalVarFields;
 
-    private readonly Dictionary<IR.IType, FieldDefinition> staticTypeInfoFields;
+    private readonly Dictionary<TypeID, FieldDefinition> staticTypeInfoFields;
+    private readonly HashSet<TypeID> typeInfoObjectsInitialized;
+
     private readonly Dictionary<IR.FunctionID, FieldDefinition> staticFuncInfoFields;
+    private readonly HashSet<IR.FunctionID> funcInfoObjectsInitialized;
 
     private readonly Dictionary<IR.ITagLocation, FieldDefinition> tagArrayFields;
 
@@ -66,13 +69,16 @@ public class AssemblyBuilder : IDisposable {
         this.TypeBuilder = new TypeBuilder(this);
         this.FunctionBuilder = new FunctionBuilder(this);
 
-        this.stringLitFields = new Dictionary<IR.StringID, FieldDefinition>();
-        this.globalVarFields = new Dictionary<IR.VariableID, FieldDefinition>();
+        this.stringLitFields = [];
+        this.globalVarFields = [];
 
-        this.staticTypeInfoFields = new Dictionary<IR.IType, FieldDefinition>();
-        this.staticFuncInfoFields = new Dictionary<IR.FunctionID, FieldDefinition>();
+        this.staticTypeInfoFields = [];
+        this.typeInfoObjectsInitialized = [];
 
-        this.tagArrayFields = new Dictionary<IR.ITagLocation, FieldDefinition>(new IR.TagLocationComparer());
+        this.staticFuncInfoFields = [];
+        this.funcInfoObjectsInitialized = [];
+
+        this.tagArrayFields = [];
 
         this.initMethods = new List<MethodDefinition>(1);
 
@@ -312,15 +318,6 @@ public class AssemblyBuilder : IDisposable {
             this.BuildStaticTypeInfo(type);
         }
 
-        foreach (var (funcID, functionInfo) in library.Metadata.Functions) {
-            if (functionInfo.Identity.HasTypeParams) {
-                // TODO: native generics
-                continue;
-            }
-
-            this.CreateStaticFuncInfoVariable(funcID);
-        }
-
         foreach (var (id, ifaceDecl) in library.Metadata.Interfaces) {
             if (ifaceDecl is IR.DefInterfaceDecl(_)) {
                 var declName = ifaceDecl.GetDeclName();
@@ -338,6 +335,7 @@ public class AssemblyBuilder : IDisposable {
         this.FunctionBuilder.BuildFunctions(library);
 
         var invocationParams = new List<IR.TypeParam>(8);
+
         foreach (var (funcID, funcInfo) in library.Metadata.Functions) {
             funcInfo.Identity.GetInvocationTypeParams(this.loadedMetadata, invocationParams);
 
@@ -438,11 +436,6 @@ public class AssemblyBuilder : IDisposable {
 
                 case IR.RefValue(IR.GlobalRef(IR.StaticFuncInfoGlobalRef(var functionID))): {
                     var funcInfoField = this.GetStaticFuncInfoFieldRef(functionID);
-                    if (funcInfoField == null) {
-                        var err = $"tag references function with missing runtime function info: {functionID}";
-                        throw new InvalidDataException(err);
-                    }
-
                     initBody.Emit(OpCodes.Ldsfld, funcInfoField);
                     break;
                 }
@@ -464,19 +457,19 @@ public class AssemblyBuilder : IDisposable {
     }
 
     private void BuildStaticTypeInfo(IR.IType type) {
+        var fieldRef = this.GetStaticTypeInfoFieldRef(type);
+
+        var typeID = this.TypeBuilder.BuildTypeID(type, out var typeRef);
+
+        if (!this.typeInfoObjectsInitialized.Add(typeID)) {
+            return;
+        }
+
         if (!this.loadedMetadata.FindTypeInfo(type, out var typeInfo)) {
             typeInfo = null;
         }
 
         var globals = this.GetInternalClass();
-
-        // undefined types may still have custom metadata associated with them e.g. Pascal enum types
-        TypeReference? typeRef;
-        if (this.loadedMetadata.IsTypeDefined(type)) {
-            typeRef = this.TypeBuilder.BuildType(type);
-        } else {
-            typeRef = null;
-        }
 
         var typeInfoClassID = IR.TypeDefID.TypeInfo.ToObjectID([]);
         var typeInfoType = typeInfoClassID.ToObjectType();
@@ -535,7 +528,7 @@ public class AssemblyBuilder : IDisposable {
             }
 
             // set flags
-            var flags = typeInfo?.Flags ?? (ulong)type.GetTypeFlags();
+            var flags = typeInfo?.Flags ?? (ulong)type.GetRuntimeTypeFlags(this.LoadedMetadata);
             if (flags != 0) {
                 createBody.Emit(OpCodes.Dup);
 
@@ -553,8 +546,6 @@ public class AssemblyBuilder : IDisposable {
         {
             var initBuilder = this.GetGlobalsCCtor();
             var initBody = initBuilder.Body.GetILProcessor();
-
-            var fieldRef = this.GetStaticTypeInfoFieldRef(type);
 
             initBody.Emit(OpCodes.Call, createMethodDef);
             initBody.Emit(OpCodes.Stsfld, fieldRef);
@@ -721,7 +712,11 @@ public class AssemblyBuilder : IDisposable {
         initBody.Emit(OpCodes.Stfld, methodsField.Field);
     }
 
-    private void CreateStaticFuncInfoVariable(IR.FunctionID funcID) {
+    public FieldReference GetStaticFuncInfoFieldRef(IR.FunctionID funcID) {
+        if (this.staticFuncInfoFields.TryGetValue(funcID, out var fieldRef)) {
+            return fieldRef;
+        }
+
         var funcInfoType = IR.TypeDefID.FunctionInfo.ToObjectType([]);
         var funcInfoTypeRef = this.TypeBuilder.BuildType(funcInfoType);
 
@@ -732,10 +727,12 @@ public class AssemblyBuilder : IDisposable {
 
         this.GetInternalClass().Fields.Add(fieldDef);
         this.staticFuncInfoFields.Add(funcID, fieldDef);
+
+        return fieldDef;
     }
 
     private void BuildStaticFuncInfo(IR.FunctionID funcID, IR.FunctionInfo funcInfo) {
-        var fieldRef = this.GetStaticFuncInfoFieldRef(funcID)!;
+        var fieldRef = this.GetStaticFuncInfoFieldRef(funcID);
 
         var funcObjectID = IR.TypeDefID.FunctionInfo.ToObjectID([]);
         var funcInfoType = funcObjectID.ToObjectType();
@@ -776,6 +773,8 @@ public class AssemblyBuilder : IDisposable {
         initBody.Emit(OpCodes.Call, this.rttiAddFuncMethod);
 
         initBody.Emit(OpCodes.Stsfld, fieldRef);
+
+//        Console.WriteLine($"built runtime info for function {funcInfo.Identity.ToString(this.loadedMetadata)}");
     }
 
     private void BuildFunctionInfoImplObject(ILProcessor body, IR.FunctionID funcID, IR.FunctionID? invokerID) {
@@ -806,16 +805,10 @@ public class AssemblyBuilder : IDisposable {
     }
 
     public FieldReference GetStaticTypeInfoFieldRef(IR.IType type) {
-        if (this.staticTypeInfoFields.TryGetValue(type, out var fieldRef)) {
-            return fieldRef;
-        }
+        var typeID = this.TypeBuilder.BuildTypeID(type, out _);
 
-        // ensure it's in the cache so if the typeinfo hasn't been generated, it will be
-        if (this.loadedMetadata.IsTypeDefined(type)) {
-            this.TypeBuilder.BuildType(type);
-        } else {
-            // undefined types may still have custom metadata associated with them e.g. Pascal enum types
-            this.TypeBuilder.Cache.RegisterType(type, this.TypeSystem.Void);
+        if (this.staticTypeInfoFields.TryGetValue(typeID, out var fieldRef)) {
+            return fieldRef;
         }
 
         var fieldName = $"StaticTypeInfo_{type.GetUniqueName(this.TypeBuilder.Cache)}";
@@ -827,13 +820,9 @@ public class AssemblyBuilder : IDisposable {
         var fieldDef = new FieldDefinition(fieldName, fieldAttrs, typeInfoTypeRef);
 
         this.GetInternalClass().Fields.Add(fieldDef);
-        this.staticTypeInfoFields.Add(type, fieldDef);
+        this.staticTypeInfoFields.Add(typeID, fieldDef);
 
         return fieldDef;
-    }
-
-    public FieldReference? GetStaticFuncInfoFieldRef(IR.FunctionID funcID) {
-        return this.staticFuncInfoFields.GetValueOrDefault(funcID);
     }
 
     public FieldReference? GetStaticTagArrayFieldRef(IR.ITagLocation tagLocation) {
@@ -847,8 +836,8 @@ public class AssemblyBuilder : IDisposable {
         var globalsInit = initFunction.Body.GetILProcessor();
 
         // add type info for any referenced types that weren't declared e.g boxes, arrays
-        foreach (var cachedType in this.TypeBuilder.Cache.AllTypes) {
-            if (!this.staticTypeInfoFields.ContainsKey(cachedType)) {
+        foreach (var (typeID, cachedType) in this.TypeBuilder.Cache.Types) {
+            if (!this.typeInfoObjectsInitialized.Contains(typeID)) {
                 this.BuildStaticTypeInfo(cachedType);
             }
         }

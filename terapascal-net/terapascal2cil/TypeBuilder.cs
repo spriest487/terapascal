@@ -166,6 +166,22 @@ public class TypeBuilder {
         this.staticArrayBuilder = new StaticArrayTypeBuilder(this.assemblyBuilder, this);
     }
 
+    // get a unique type ID for an IR type - safe to use with undefined types, which get a unique ID but no
+    // type reference
+    public TypeID BuildTypeID(IR.IType type, out TypeReference? typeRef) {
+        TypeID typeID;
+        // ensure it's in the cache so if the typeinfo hasn't been generated, it will be
+        if (this.assemblyBuilder.LoadedMetadata.IsTypeDefined(type)) {
+            typeRef = this.BuildType(type, out typeID);
+        } else {
+            // undefined types may still have custom metadata associated with them e.g. Pascal enum types
+            typeID = this.Cache.RegisterType(type, this.assemblyBuilder.TypeSystem.Void);
+            typeRef = null;
+        }
+
+        return typeID;
+    }
+
     public TypeReference BuildType(IR.IType type) {
         return this.BuildType(type, out _);
     }

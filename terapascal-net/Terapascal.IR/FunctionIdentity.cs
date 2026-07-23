@@ -18,6 +18,8 @@ public interface IFunctionIdentity {
         IMetadataSource metadata,
         List<TypeParam> result
     ) {
+        result.Clear();
+
         if (declaringType != null
             && metadata.FindDeclPath(declaringType, out var declPath)
             && declPath.HasTypeParams
