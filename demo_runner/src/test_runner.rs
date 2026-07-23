@@ -335,6 +335,7 @@ impl<'a> TestRunner<'a> {
                 Ok(expected) => expected,
                 Err(err) => {
                     self.output.status = TestStatus::Error(err);
+                    self.flush_to_log();
                     return self.output;
                 }
             };

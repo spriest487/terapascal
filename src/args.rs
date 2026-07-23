@@ -47,6 +47,9 @@ pub struct Args {
     #[structopt(long="unsafe", default_value = "true", parse(try_from_str = parse_bool))]
     pub allow_unsafe: bool,
 
+    #[structopt(long = "merge")]
+    pub merge: bool,
+
     /// Source directory to search for unit source files
     #[structopt(long = "search-dir", short = "s", parse(from_os_str))]
     pub search_dirs: Vec<PathBuf>,

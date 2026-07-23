@@ -218,7 +218,11 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
             if let Some(BuildStage::Codegen) = args.dump_stage {
                 return print_output(args.output_path(), |dst: &mut dyn fmt::Write| {
                     let metadata = libs.to_metadata_builder();
-                    libs.main.format(dst, &metadata)
+                    if args.merge {
+                        libs.merge().format(dst, &metadata)
+                    } else {
+                        libs.main.format(dst, &metadata)
+                    }
                 });
             }
 
@@ -230,7 +234,11 @@ fn handle_output(output: BuildOutput, args: &Args) -> Result<(), RunError> {
 
                 if output_ext.eq_ignore_ascii_case(IR_LIB_EXT) {
                     // the IR object is the output
-                    let module_bytes = ir::encode_lib(&libs.main)?;
+                    let module_bytes = if args.merge {
+                        ir::encode_lib(&libs.merge())?
+                    } else {
+                        ir::encode_lib(&libs.main)?
+                    };
 
                     write_output(Some(out_path), |dst| {
                         dst.write_all(&module_bytes)
