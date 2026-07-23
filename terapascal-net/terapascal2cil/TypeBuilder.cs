@@ -1275,7 +1275,7 @@ public class TypeBuilder {
     public GenericInstanceMethod GetObjectCreateMethod(IR.IObjectID classID) {
         var module = this.assemblyBuilder.Module;
 
-        var classTypeRef = this.BuildType(new IR.ObjectType(classID));
+        var classTypeRef = this.BuildType(classID.ToObjectType());
 
         var methodInstance = new GenericInstanceMethod(module.ImportReference(this.ObjectCreateMethod));
         methodInstance.GenericArguments.Add(module.ImportReference(classTypeRef));

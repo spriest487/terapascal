@@ -393,43 +393,95 @@ public class AssemblyBuilder : IDisposable {
         var tagFieldDef = new FieldDefinition(tagLoc.GetUniqueName(), tagFieldAttrs, tagArrayTypeRef);
         this.globalsClass!.Fields.Add(tagFieldDef);
 
-        var initBody = this.GetGlobalsCCtor().Body.GetILProcessor();
+        var initMethod = this.GetGlobalsCCtor();
+        var initBody = initMethod.Body.GetILProcessor();
+
         initBody.Emit(OpCodes.Ldc_I4, tags.Count);
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal
         initBody.Emit(OpCodes.Call, arrayCreateInstance);
 
-        initBody.Emit(OpCodes.Dup);
-        initBody.Emit(OpCodes.Stsfld, tagFieldDef);
+        for (var index = 0; index < tags.Count; index += 1) {
+            var tag = tags[index];
 
-        foreach (var tag in tags) {
+            initBody.Emit(OpCodes.Dup); // array reference
+            initBody.Emit(OpCodes.Ldc_I4, index); // index
+            this.BuildTagInstance(tag, initBody);
 
+            initBody.Emit(OpCodes.Stelem_Any, this.TypeBuilder.ObjectBaseType);
         }
 
-        initBody.Emit(OpCodes.Pop);
+        initBody.Emit(OpCodes.Stsfld, tagFieldDef);
 
         this.tagArrayFields.Add(tagLoc, tagFieldDef);
     }
 
-    private void BuildStaticTypeInfo(IR.IType type) {
-        // skip undefined types (reserved but not defined e.g. Terapascal enums)
-        if (!this.loadedMetadata.IsTypeDefined(type)) {
-            return;
-        }
+    private void BuildTagInstance(IR.TagInfo tag, ILProcessor initBody) {
+        var tagObjectID = tag.ClassID.ToObjectID([]);
+        var tagClassType = tagObjectID.ToObjectType();
 
+        var createMethod = this.TypeBuilder.GetObjectCreateMethod(tagObjectID);
+
+        initBody.Emit(OpCodes.Ldc_I4_1); // immortal
+        initBody.Emit(OpCodes.Call, createMethod);
+
+        foreach (var (fieldID, fieldVal) in tag.Fields) {
+            var tagFieldRef = this.TypeBuilder.GetFieldRef(tagClassType, fieldID);
+
+            initBody.Emit(OpCodes.Dup);
+
+            switch (fieldVal) {
+                case IR.RefValue(IR.GlobalRef(IR.StaticTypeInfoGlobalRef(var typeInfoType))): {
+                    var typeInfoField = this.GetStaticTypeInfoFieldRef(typeInfoType);
+                    initBody.Emit(OpCodes.Ldsfld, typeInfoField);
+                    break;
+                }
+
+                case IR.RefValue(IR.GlobalRef(IR.StaticFuncInfoGlobalRef(var functionID))): {
+                    var funcInfoField = this.GetStaticFuncInfoFieldRef(functionID);
+                    if (funcInfoField == null) {
+                        var err = $"tag references function with missing runtime function info: {functionID}";
+                        throw new InvalidDataException(err);
+                    }
+
+                    initBody.Emit(OpCodes.Ldsfld, funcInfoField);
+                    break;
+                }
+
+                case IR.RefValue(IR.GlobalRef(IR.StringLiteralGlobalRef(var stringID))): {
+                    var stringFieldRef = this.GetStringLiteralRef(stringID);
+                    initBody.Emit(OpCodes.Ldsfld, stringFieldRef);
+                    break;
+                }
+
+                default: {
+                    initBody.EmitLoadLiteral(fieldVal);
+                    break;
+                }
+            }
+
+            initBody.Emit(OpCodes.Stfld, tagFieldRef.Field);
+        }
+    }
+
+    private void BuildStaticTypeInfo(IR.IType type) {
         if (!this.loadedMetadata.FindTypeInfo(type, out var typeInfo)) {
             typeInfo = null;
         }
 
         var globals = this.GetInternalClass();
 
-        this.TypeBuilder.BuildType(IR.TypeDefID.TypeInfo.ToObjectType([]));
-        var typeRef = this.TypeBuilder.BuildType(type);
+        // undefined types may still have custom metadata associated with them e.g. Pascal enum types
+        TypeReference? typeRef;
+        if (this.loadedMetadata.IsTypeDefined(type)) {
+            typeRef = this.TypeBuilder.BuildType(type);
+        } else {
+            typeRef = null;
+        }
 
         var typeInfoClassID = IR.TypeDefID.TypeInfo.ToObjectID([]);
         var typeInfoType = typeInfoClassID.ToObjectType();
 
-        var typeInfoTypeRef = this.Module
-            .ImportReference(this.TypeBuilder.BuildType(typeInfoType));
+        var typeInfoTypeRef = this.TypeBuilder.BuildType(typeInfoType);
 
         var methodName = "CreateTypeInfo_" + type.GetUniqueName(this.TypeBuilder.Cache);
         const MethodAttributes methodAttrs = MethodAttributes.Private
@@ -464,8 +516,14 @@ public class AssemblyBuilder : IDisposable {
 
             // set type pointer
             createBody.Emit(OpCodes.Dup);
-            createBody.Emit(OpCodes.Ldtoken, typeRef);
-            createBody.Emit(OpCodes.Call, this.TypeBuilder.GetTypeFromHandleMethod);
+
+            if (typeRef != null) {
+                createBody.Emit(OpCodes.Ldtoken, typeRef);
+                createBody.Emit(OpCodes.Call, this.TypeBuilder.GetTypeFromHandleMethod);
+            } else {
+                createBody.Emit(OpCodes.Ldnull);
+            }
+
             createBody.Emit(OpCodes.Stfld, implField.Field);
 
             // set tags array
@@ -496,16 +554,10 @@ public class AssemblyBuilder : IDisposable {
             var initBuilder = this.GetGlobalsCCtor();
             var initBody = initBuilder.Body.GetILProcessor();
 
-            var fieldName = $"StaticTypeInfo_{type.GetUniqueName(this.TypeBuilder.Cache)}";
-
-            const FieldAttributes fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
-            var fieldDef = new FieldDefinition(fieldName, fieldAttrs, typeInfoTypeRef);
-
-            globals.Fields.Add(fieldDef);
-            this.staticTypeInfoFields.Add(type, fieldDef);
+            var fieldRef = this.GetStaticTypeInfoFieldRef(type);
 
             initBody.Emit(OpCodes.Call, createMethodDef);
-            initBody.Emit(OpCodes.Stsfld, fieldDef);
+            initBody.Emit(OpCodes.Stsfld, fieldRef);
         }
     }
 
@@ -754,15 +806,30 @@ public class AssemblyBuilder : IDisposable {
     }
 
     public FieldReference GetStaticTypeInfoFieldRef(IR.IType type) {
-        if (!this.staticTypeInfoFields.TryGetValue(type, out var typeInfoField)) {
-            this.BuildStaticTypeInfo(type);
+        if (this.staticTypeInfoFields.TryGetValue(type, out var fieldRef)) {
+            return fieldRef;
         }
 
-        if (!this.staticTypeInfoFields.TryGetValue(type, out typeInfoField)) {
-            throw new InvalidDataException($"reference to missing type info for type: {type.ToString(this.LoadedMetadata)}");
+        // ensure it's in the cache so if the typeinfo hasn't been generated, it will be
+        if (this.loadedMetadata.IsTypeDefined(type)) {
+            this.TypeBuilder.BuildType(type);
+        } else {
+            // undefined types may still have custom metadata associated with them e.g. Pascal enum types
+            this.TypeBuilder.Cache.RegisterType(type, this.TypeSystem.Void);
         }
 
-        return typeInfoField;
+        var fieldName = $"StaticTypeInfo_{type.GetUniqueName(this.TypeBuilder.Cache)}";
+
+        var typeInfoType = IR.TypeDefID.TypeInfo.ToObjectType([]);
+        var typeInfoTypeRef = this.TypeBuilder.BuildType(typeInfoType);
+
+        const FieldAttributes fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
+        var fieldDef = new FieldDefinition(fieldName, fieldAttrs, typeInfoTypeRef);
+
+        this.GetInternalClass().Fields.Add(fieldDef);
+        this.staticTypeInfoFields.Add(type, fieldDef);
+
+        return fieldDef;
     }
 
     public FieldReference? GetStaticFuncInfoFieldRef(IR.FunctionID funcID) {
