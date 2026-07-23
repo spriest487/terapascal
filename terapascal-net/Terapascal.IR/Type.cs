@@ -255,6 +255,21 @@ public interface IType : IEquatable<IType> {
     bool IEquatable<IType>.Equals(IType? other) {
         return Equals(this, other);
     }
+
+    TypeFlags GetTypeFlags() => this switch {
+        ArrayType => TypeFlags.Array,
+
+        FunctionType => TypeFlags.Function,
+
+        PrimitiveType or StructType or VariantType => TypeFlags.Value,
+
+        ObjectType(ArrayObjectID) => TypeFlags.Array,
+        WeakObjectType(ArrayObjectID) => TypeFlags.Weak | TypeFlags.Array,
+
+        WeakObjectType => TypeFlags.Weak,
+
+        _ => TypeFlags.None,
+    };
 }
 
 public abstract record PrimitiveType : IType {

@@ -1,7 +1,6 @@
-﻿using System.Diagnostics;
+﻿using System.Diagnostics.CodeAnalysis;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-using Mono.Cecil.Rocks;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodAttributes = Mono.Cecil.MethodAttributes;
 using TypeAttributes = Mono.Cecil.TypeAttributes;
@@ -92,6 +91,23 @@ public class AssemblyBuilder : IDisposable {
         this.StandardLibrary.Dispose();
     }
 
+    private void EmitConsoleWrite(ILProcessor body, string message) {
+        var consoleClass = this.StandardLibrary.Modules
+            .SelectMany(module => module.Types)
+            .FirstOrDefault(typeDef => typeDef.Name == nameof(Console))
+            ?? throw new InvalidDataException("missing system Console class");
+
+        var consoleClassDef = consoleClass.Resolve();
+        var writeLineMethod = consoleClassDef.Methods.FirstOrDefault(
+            m => m.Name == nameof(Console.WriteLine)
+                && m.Parameters.Count == 1
+                && m.Parameters[0].ParameterType.FullName == typeof(string).FullName
+        );
+
+        body.Emit(OpCodes.Ldstr, message);
+        body.Emit(OpCodes.Call, this.Module.ImportReference(writeLineMethod));
+    }
+
     public TypeDefinition GetInternalClass() {
         if (this.globalsClass != null) {
             return this.globalsClass;
@@ -174,7 +190,6 @@ public class AssemblyBuilder : IDisposable {
         return this.Module.ImportReference(methodDef);
     }
 
-
     public TypeReference GetRuntimeTypeRef(string name, bool valueType, bool import = true) {
         var typeRef = new TypeReference("Terapascal.Runtime",
             name,
@@ -205,9 +220,6 @@ public class AssemblyBuilder : IDisposable {
         // we have to copy the string literals into pascal strings for now
 
         var globals = this.GetInternalClass();
-        var stringTypeRef = this.GetRuntimeTypeRef(nameof(Runtime.String), false);
-
-        var createStringMethod = this.FindRuntimeFunction(nameof(Runtime.SystemFunctions.CreateString));
 
         var globalsInit = this.GetGlobalsCCtor().Body.GetILProcessor();
 
@@ -218,7 +230,7 @@ public class AssemblyBuilder : IDisposable {
             }
 
             var fieldAttrs = FieldAttributes.Assembly | FieldAttributes.InitOnly | FieldAttributes.Static;
-            var fieldDef = new FieldDefinition($"String_{id.ID}", fieldAttrs, stringTypeRef);
+            var fieldDef = new FieldDefinition($"String_{id.ID}", fieldAttrs, this.TypeBuilder.StringType);
 
             globals.Fields.Add(fieldDef);
 
@@ -226,7 +238,7 @@ public class AssemblyBuilder : IDisposable {
 
             globalsInit.Emit(OpCodes.Ldstr, stringLit);
             globalsInit.Emit(OpCodes.Ldc_I4, 1);
-            globalsInit.Emit(OpCodes.Call, createStringMethod);
+            globalsInit.Emit(OpCodes.Call, this.TypeBuilder.CreateStringMethod);
             globalsInit.Emit(OpCodes.Stsfld, fieldDef);
         }
 
@@ -288,16 +300,16 @@ public class AssemblyBuilder : IDisposable {
         }
 
         foreach (var (tagLoc, tags) in library.Metadata.GetAllTags()) {
-            this.BuildStaticTagsArrayField(tagLoc, tags.Count);
+            this.BuildStaticTagsArrayField(tagLoc, tags);
         }
 
-        foreach (var (type, typeInfo) in library.Metadata.TypeInfo) {
+        foreach (var type in library.Metadata.TypeInfo.Keys) {
             if (type.ContainsGenericParams) {
                 // TODO: native generics
                 continue;
             }
 
-            this.BuildStaticTypeInfo(type, typeInfo, globals);
+            this.BuildStaticTypeInfo(type);
         }
 
         foreach (var (funcID, functionInfo) in library.Metadata.Functions) {
@@ -369,99 +381,224 @@ public class AssemblyBuilder : IDisposable {
         }
     }
 
-    private void BuildStaticTagsArrayField(IR.ITagLocation tagLoc, int count) {
-        var tagArrayTypeRef = this.TypeBuilder.BuildType(IR.IType.Any.MakeDynArray());
-        var arrayCreateInstance = this.TypeBuilder.GetArrayCreateMethod(IR.IType.Any);
-
-        if (count == 0) {
+    private void BuildStaticTagsArrayField(IR.ITagLocation tagLoc, IReadOnlyList<IR.TagInfo> tags) {
+        if (tags.Count == 0) {
             return;
         }
+
+        var tagArrayTypeRef = this.TypeBuilder.BuildType(IR.IType.Any.MakeDynArray());
+        var arrayCreateInstance = this.TypeBuilder.GetArrayCreateMethod(IR.IType.Any);
 
         const FieldAttributes tagFieldAttrs = FieldAttributes.Static | FieldAttributes.Assembly;
         var tagFieldDef = new FieldDefinition(tagLoc.GetUniqueName(), tagFieldAttrs, tagArrayTypeRef);
         this.globalsClass!.Fields.Add(tagFieldDef);
 
         var initBody = this.GetGlobalsCCtor().Body.GetILProcessor();
-        initBody.Emit(OpCodes.Ldc_I4, count);
+        initBody.Emit(OpCodes.Ldc_I4, tags.Count);
         initBody.Emit(OpCodes.Ldc_I4_1); // immortal
         initBody.Emit(OpCodes.Call, arrayCreateInstance);
+
+        initBody.Emit(OpCodes.Dup);
         initBody.Emit(OpCodes.Stsfld, tagFieldDef);
+
+        foreach (var tag in tags) {
+
+        }
+
+        initBody.Emit(OpCodes.Pop);
 
         this.tagArrayFields.Add(tagLoc, tagFieldDef);
     }
 
-    private void BuildStaticTypeInfo(
-        IR.IType type,
-        IR.TypeInfo typeInfo,
-        TypeDefinition globals
-    ) {
-        this.TypeBuilder.BuildType(IR.TypeDefID.TypeInfo.ToObjectType([]));
-
+    private void BuildStaticTypeInfo(IR.IType type) {
         // skip undefined types (reserved but not defined e.g. Terapascal enums)
         if (!this.loadedMetadata.IsTypeDefined(type)) {
             return;
         }
 
+        if (!this.loadedMetadata.FindTypeInfo(type, out var typeInfo)) {
+            typeInfo = null;
+        }
+
+        var globals = this.GetInternalClass();
+
+        this.TypeBuilder.BuildType(IR.TypeDefID.TypeInfo.ToObjectType([]));
         var typeRef = this.TypeBuilder.BuildType(type);
 
         var typeInfoClassID = IR.TypeDefID.TypeInfo.ToObjectID([]);
         var typeInfoType = typeInfoClassID.ToObjectType();
 
-        var nameField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoName);
-        var implField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoImpl);
-        var tagsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoTags);
-        var flagsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoFlags);
-
         var typeInfoTypeRef = this.Module
-            .ImportReference(this.TypeBuilder
-            .BuildType(typeInfoType));
+            .ImportReference(this.TypeBuilder.BuildType(typeInfoType));
 
-        var fieldName = $"StaticTypeInfo_{type.GetUniqueName(this.TypeBuilder.Cache)}";
+        var methodName = "CreateTypeInfo_" + type.GetUniqueName(this.TypeBuilder.Cache);
+        const MethodAttributes methodAttrs = MethodAttributes.Private
+            | MethodAttributes.Static
+            | MethodAttributes.SpecialName;
+        var createMethodDef = new MethodDefinition(methodName, methodAttrs, typeInfoTypeRef);
 
-        const FieldAttributes fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
-        var fieldDef = new FieldDefinition(fieldName, fieldAttrs, typeInfoTypeRef);
+        globals.Methods.Add(createMethodDef);
 
-        globals.Fields.Add(fieldDef);
-        this.staticTypeInfoFields.Add(type, fieldDef);
+        // build the TypeInfo instance
+        {
+            var createBody = createMethodDef.Body.GetILProcessor();
 
-        var initBuilder = this.GetGlobalsCCtor();
-        var initBody = initBuilder.Body.GetILProcessor();
+            var nameField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoName);
+            var implField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoImpl);
+            var tagsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoTags);
+            var flagsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoFlags);
 
-        var createTypeInfoInst = this.TypeBuilder.GetObjectCreateMethod(typeInfoClassID);
+            var createTypeInfoInst = this.TypeBuilder.GetObjectCreateMethod(typeInfoClassID);
 
-        initBody.Emit(OpCodes.Ldc_I4_1); // immortal: true
-        initBody.Emit(OpCodes.Call, createTypeInfoInst);
-        initBody.Emit(OpCodes.Stsfld, fieldDef);
+            createBody.Emit(OpCodes.Ldc_I4_1); // immortal: true
+            createBody.Emit(OpCodes.Call, createTypeInfoInst);
 
-        // register in RTTI list
-        initBody.Emit(OpCodes.Ldsfld, fieldDef);
-        initBody.Emit(OpCodes.Call, this.rttiAddTypeMethod);
+            // register in RTTI list
+            createBody.Emit(OpCodes.Dup);
+            createBody.Emit(OpCodes.Call, this.rttiAddTypeMethod);
 
-        var nameStringFieldRef = this.GetStringLiteralRef(typeInfo.Name ?? IR.StringID.EmptyString);
-        initBody.Emit(OpCodes.Ldsfld, fieldDef);
-        initBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
-        initBody.Emit(OpCodes.Stfld, nameField.Field);
+            var nameStringFieldRef = this.GetOrCreateRuntimeTypeNameField(type, createBody);
+            createBody.Emit(OpCodes.Dup);
+            createBody.Emit(OpCodes.Ldsfld, nameStringFieldRef);
+            createBody.Emit(OpCodes.Stfld, nameField.Field);
 
-        // set type pointer
-        initBody.Emit(OpCodes.Ldsfld, fieldDef);
-        initBody.Emit(OpCodes.Ldtoken, typeRef);
-        initBody.Emit(OpCodes.Call, this.TypeBuilder.GetTypeFromHandleMethod);
-        initBody.Emit(OpCodes.Stfld, implField.Field);
+            // set type pointer
+            createBody.Emit(OpCodes.Dup);
+            createBody.Emit(OpCodes.Ldtoken, typeRef);
+            createBody.Emit(OpCodes.Call, this.TypeBuilder.GetTypeFromHandleMethod);
+            createBody.Emit(OpCodes.Stfld, implField.Field);
 
-        // set tags array
-        var typeTagsLoc = type.GetTagsLocation();
-        if (typeTagsLoc != null && this.GetStaticTagArrayFieldRef(typeTagsLoc) is {} tagsArrayFieldRef) {
-            initBody.Emit(OpCodes.Ldsfld, fieldDef);
-            initBody.Emit(OpCodes.Ldsfld, tagsArrayFieldRef);
-            initBody.Emit(OpCodes.Stfld, tagsField.Field);
+            // set tags array
+            var typeTagsLoc = type.GetTagsLocation();
+            if (typeTagsLoc != null && this.GetStaticTagArrayFieldRef(typeTagsLoc) is { } tagsArrayFieldRef) {
+                createBody.Emit(OpCodes.Dup);
+                createBody.Emit(OpCodes.Ldsfld, tagsArrayFieldRef);
+                createBody.Emit(OpCodes.Stfld, tagsField.Field);
+            }
+
+            // set flags
+            var flags = typeInfo?.Flags ?? (ulong)type.GetTypeFlags();
+            if (flags != 0) {
+                createBody.Emit(OpCodes.Dup);
+
+                unchecked {
+                    createBody.Emit(OpCodes.Ldc_I8, (long)flags);
+                }
+
+                createBody.Emit(OpCodes.Stfld, flagsField.Field);
+            }
+
+            createBody.Emit(OpCodes.Ret);
         }
 
-        // set flags
-        initBody.Emit(OpCodes.Ldsfld, fieldDef);
-        unchecked {
-            initBody.Emit(OpCodes.Ldc_I8, (long)typeInfo.Flags);
+        // call the method and set the global var
+        {
+            var initBuilder = this.GetGlobalsCCtor();
+            var initBody = initBuilder.Body.GetILProcessor();
+
+            var fieldName = $"StaticTypeInfo_{type.GetUniqueName(this.TypeBuilder.Cache)}";
+
+            const FieldAttributes fieldAttrs = FieldAttributes.Assembly | FieldAttributes.Static;
+            var fieldDef = new FieldDefinition(fieldName, fieldAttrs, typeInfoTypeRef);
+
+            globals.Fields.Add(fieldDef);
+            this.staticTypeInfoFields.Add(type, fieldDef);
+
+            initBody.Emit(OpCodes.Call, createMethodDef);
+            initBody.Emit(OpCodes.Stsfld, fieldDef);
         }
-        initBody.Emit(OpCodes.Stfld, flagsField.Field);
+    }
+
+    private FieldReference GetOrCreateRuntimeTypeNameField(IR.IType type, ILProcessor initBuilder) {
+        if (this.loadedMetadata.FindTypeInfo(type, out var typeInfo) && typeInfo.Name != null) {
+            return this.GetStringLiteralRef(typeInfo.Name.Value);
+        }
+
+        if (this.TryCreateRuntimeTypeName(type, out var name)) {
+            var fieldName = $"RuntimeTypeName_{type.GetUniqueName(this.TypeBuilder.Cache)}";
+            var fieldAttrs = FieldAttributes.Private | FieldAttributes.Static;
+
+            var stringTypeRef = this.GetRuntimeTypeRef(nameof(Runtime.String), valueType: false);
+            var stringField = new FieldDefinition(fieldName, fieldAttrs, stringTypeRef);
+
+            initBuilder.Body.Method.DeclaringType.Fields.Add(stringField);
+
+            initBuilder.Emit(OpCodes.Ldstr, name);
+            initBuilder.Emit(OpCodes.Ldc_I4_1);
+            initBuilder.Emit(OpCodes.Call, this.TypeBuilder.CreateStringMethod);
+            initBuilder.Emit(OpCodes.Stsfld, stringField);
+
+            return stringField;
+        }
+
+        return this.GetStringLiteralRef(IR.StringID.EmptyString);
+    }
+
+    private bool TryCreateRuntimeTypeName(IR.IType type, [NotNullWhen(true)] out string? name) {
+        name = null;
+
+        if (this.loadedMetadata.FindTypeInfo(type, out var typeInfo)
+            && typeInfo.Name != null
+            && this.LoadedMetadata.FindStringLiteral(typeInfo.Name.Value, out name)
+        ) {
+            return true;
+        }
+
+        switch (type) {
+            case IR.ObjectType(var objectID): {
+                return this.TryCreateRuntimeTypeName(objectID, out name);
+            }
+
+            case IR.WeakObjectType(var objectID): {
+                if (this.TryCreateRuntimeTypeName(objectID, out var objectName)) {
+                    name = $"weak {objectName}";
+                    return true;
+                }
+
+                break;
+            }
+
+            case IR.ArrayType { Element: var elementType, Length: var length }: {
+                if (this.TryCreateRuntimeTypeName(elementType, out var elementName)) {
+                    name = $"array[{length}] of {elementName}";
+                    return true;
+                }
+                break;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryCreateRuntimeTypeName(IR.IObjectID objectID, [NotNullWhen(true)] out string? name) {
+        name = null;
+
+        switch (objectID) {
+            case IR.AnyObjectID: {
+                name = nameof(Runtime.Object);
+                return true;
+            }
+
+            case IR.ArrayObjectID(var elementType): {
+                if (this.TryCreateRuntimeTypeName(elementType, out var elementName)) {
+                    name = $"array of {elementName}";
+                    return true;
+                }
+
+                break;
+            }
+
+            case IR.BoxObjectID(var elementType): {
+                if (this.TryCreateRuntimeTypeName(elementType, out var elementName)) {
+                    name = $"box of {elementName}";
+                    return true;
+                }
+                break;
+            }
+        }
+
+
+        return false;
     }
 
     private void BuildTypeInfoMethodsInit(
@@ -469,10 +606,6 @@ public class AssemblyBuilder : IDisposable {
         IR.TypeInfo typeInfo
     ) {
         var typeInfoFieldRef = this.GetStaticTypeInfoFieldRef(type);
-        if (typeInfoFieldRef == null) {
-            var msg = $"missing typeinfo field: typeinfo was not built yet for {type.ToString(this.loadedMetadata)}";
-            throw new InvalidDataException(msg);
-        }
 
         var typeInfoType = IR.TypeDefID.TypeInfo.ToObjectType([]);
         var methodsField = this.TypeBuilder.GetFieldRef(typeInfoType, IR.FieldID.TypeInfoMethods);
@@ -485,8 +618,8 @@ public class AssemblyBuilder : IDisposable {
         var methodInfoTypeDef = methodInfoTypeRef.Resolve();
 
         var createMethodInfoInst = this.TypeBuilder.GetObjectCreateMethod(methodInfoClassID);
-        var methodNameField =  this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.name)));
-        var methodImplField =  this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.impl)));
+        var methodNameField = this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.name)));
+        var methodImplField = this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.impl)));
         var methodOwnerField = this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.owner)));
         var methodTagsField = this.Module.ImportReference(methodInfoTypeDef.GetFieldByName(nameof(Runtime.MethodInfo.tags)));
 
@@ -620,8 +753,16 @@ public class AssemblyBuilder : IDisposable {
         }
     }
 
-    public FieldReference? GetStaticTypeInfoFieldRef(IR.IType type) {
-        return this.staticTypeInfoFields.GetValueOrDefault(type);
+    public FieldReference GetStaticTypeInfoFieldRef(IR.IType type) {
+        if (!this.staticTypeInfoFields.TryGetValue(type, out var typeInfoField)) {
+            this.BuildStaticTypeInfo(type);
+        }
+
+        if (!this.staticTypeInfoFields.TryGetValue(type, out typeInfoField)) {
+            throw new InvalidDataException($"reference to missing type info for type: {type.ToString(this.LoadedMetadata)}");
+        }
+
+        return typeInfoField;
     }
 
     public FieldReference? GetStaticFuncInfoFieldRef(IR.FunctionID funcID) {
@@ -637,6 +778,13 @@ public class AssemblyBuilder : IDisposable {
 
         var initFunction = this.GetGlobalsCCtor();
         var globalsInit = initFunction.Body.GetILProcessor();
+
+        // add type info for any referenced types that weren't declared e.g boxes, arrays
+        foreach (var cachedType in this.TypeBuilder.Cache.AllTypes) {
+            if (!this.staticTypeInfoFields.ContainsKey(cachedType)) {
+                this.BuildStaticTypeInfo(cachedType);
+            }
+        }
 
         globalsInit.Emit(OpCodes.Ret);
 

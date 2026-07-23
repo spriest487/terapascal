@@ -21,6 +21,8 @@ internal class TypeCache {
 
     private int nextID;
 
+    public IEnumerable<IR.IType> AllTypes => this.types.Values;
+
     public TypeCache() {
         this.types = [];
         this.ids = [];

@@ -73,6 +73,9 @@ public class TypeBuilder {
     public TypeReference MethodInfoType { get; }
     public TypeReference ErrorType { get; }
 
+    public TypeReference StringType { get; }
+    public MethodReference CreateStringMethod { get; }
+
     public MethodReference GetTypeFromHandleMethod { get; }
     public MethodReference GetMethodFromHandleMethod { get; }
 
@@ -101,6 +104,9 @@ public class TypeBuilder {
         this.rcMethodTables = [];
 
         this.staticArrayElementMethods = [];
+
+        this.StringType = assemblyBuilder.GetRuntimeTypeRef(nameof(Runtime.String), false);
+        this.CreateStringMethod = assemblyBuilder.FindRuntimeFunction(nameof(Runtime.SystemFunctions.CreateString));
 
         this.ValueType = this.ImportCoreReference(typeof(ValueType));
         this.ExceptionType = this.ImportCoreReference(typeof(Exception));

@@ -19,7 +19,7 @@ internal static class TypeUniqueName {
             IR.WeakObjectType(var classID) => $"WeakObject_{classID.GetUniqueName(typeCache)}",
             IR.StructType(_) => $"Struct_{typeCache.GetTypeID(type)}",
             IR.VariantType(_) => $"Variant_{typeCache.GetTypeID(type)}",
-            IR.TempRefType tempRefType => $"Ref_{tempRefType.GetUniqueName(typeCache)}",
+            IR.TempRefType(var derefType) => $"Ref_{derefType.GetUniqueName(typeCache)}",
             IR.U16Type => "U16",
             IR.U32Type => "U32",
             IR.U64Type => "U64",

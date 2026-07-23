@@ -18,6 +18,8 @@ public interface IMetadataSource {
     bool FindTypeDecl(TypeDefID id, [NotNullWhen(true)] out ITypeDecl? decl);
     bool IsTypeDefined(IType type);
 
+    bool FindTypeInfo(IType type, [NotNullWhen(true)] out TypeInfo? typeInfo);
+
     IEnumerable<(ITagLocation, IReadOnlyList<TagInfo>)> GetAllTags();
 
     IEnumerable<(InterfaceID ID, InterfaceDef InterfaceDef)> GetInterfaceDefs();

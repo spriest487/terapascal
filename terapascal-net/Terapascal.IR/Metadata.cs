@@ -111,6 +111,10 @@ public class Metadata : IMetadataSource {
         };
     }
 
+    public bool FindTypeInfo(IType type, [NotNullWhen(true)] out TypeInfo? typeInfo) {
+        return this.TypeInfo.TryGetValue(type, out typeInfo);
+    }
+
     private bool IsTypeDefined(TypeRef typeRef) {
         return this.FindTypeDef(typeRef.DefID, out _);
     }
@@ -265,19 +269,4 @@ public class Metadata : IMetadataSource {
         sig = null;
         return false;
     }
-}
-
-[MessagePackObject]
-public class TypeInfo {
-    [Key("name")]
-    public StringID? Name { get; init; }
-
-    [Key("methods")]
-    public required IReadOnlyList<MethodInfo> Methods {
-        get;
-        init => field = value.ToArrayNonNull();
-    }
-    
-    [Key("flags")]
-    public ulong Flags { get; init; }
 }
